@@ -96,16 +96,16 @@ it('the ask: a match, anonymous, with their light waiting at the edge', async ()
   expect(bubble()).toContain('If they say yes too');
 });
 
-it('the introduction: their creature, the real one in cooler light, beside yours under "You both hold"', async () => {
-  STATE.now = base({ introduction: { id: 'i1', stage: 'introduced', name: 'Jun', principle: PRINCIPLE } });
+it('the introduction: their creature, the real one in cooler light and with no name, beside yours under "You both hold"', async () => {
+  STATE.now = base({ introduction: { id: 'i1', stage: 'introduced', principle: PRINCIPLE } });
   world = await mountWorld(FACTS); await settle();
   expect(bubble()).toContain('You both hold');
   expect(bubble()).toContain(PRINCIPLE);
   const guest = world.container.querySelector('.waka-intro-guest');
   expect(guest?.querySelector('canvas.waka-companion-body'), 'the guest is not the real Companion').not.toBeNull();
-  expect(guest?.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Jun');
+  expect(guest?.querySelector('[role="img"]')?.getAttribute('aria-label'), 'the guest is named').toBe('Someone');
   expect(world.container.querySelector('.waka-intro-bridge')).not.toBeNull();
-  expect(world.container.querySelector('.waka-intro-label--guest')?.textContent).toBe('Jun');
+  expect(world.container.querySelector('.waka-intro-scene')?.textContent, 'the guest carries a label').toBe('');
   expect(world.container.querySelector('.waka-principles-spark'), 'the spark steps aside for the guest').toBeNull();
   STATE.now = base({});
   await press('Done');

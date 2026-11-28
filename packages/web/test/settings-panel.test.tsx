@@ -21,6 +21,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { SettingsPanel, type SettingsPanelProps } from "../src/components/SettingsPanel";
 import { fetchIntroductions, setIntroductionConsent } from "../src/lib/api/introductions";
+import { INTRODUCTIONS_CHANGED } from "../src/lib/introductions";
 
 vi.mock("../src/lib/api/introductions", () => ({
   fetchIntroductions: vi.fn(async () => ({ available: false, consent: { enabled: false, answered: false }, offerConsent: false, introduction: null })),
@@ -203,4 +204,14 @@ it("turns introductions on and off from Your data, and shows the switch while th
   root = createRoot(host);
   await render({});
   expect(row(), "not offered and off: no row").toBeUndefined();
+});
+
+it("rereads introductions when home flips the switch, so the row never offers the act just done", async () => {
+  vi.mocked(fetchIntroductions).mockResolvedValueOnce({ available: true, consent: { enabled: true, answered: true }, offerConsent: false, introduction: null });
+  await render({});
+  const row = () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => /introductions/.test(b.textContent ?? ""));
+  expect(row()?.textContent).toBe("Turn off introductions");
+  vi.mocked(fetchIntroductions).mockResolvedValueOnce({ available: true, consent: { enabled: false, answered: true }, offerConsent: false, introduction: null });
+  await act(async () => { window.dispatchEvent(new CustomEvent(INTRODUCTIONS_CHANGED, { detail: { enabled: false, source: "home" } })); });
+  expect(row()?.textContent).toBe("Turn on introductions");
 });

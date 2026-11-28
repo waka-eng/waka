@@ -386,10 +386,15 @@ function IntroductionsControl({ locale }: { locale: SupportedLocale }): JSX.Elem
   const [state, setState] = useState<{ available: boolean; enabled: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  /* Read on open, and again whenever home's bubble flips the switch, so the
+     row never offers the act that was just done. */
   useEffect(() => {
     let live = true;
-    void fetchIntroductions().then((next) => { if (live) setState({ available: next.available, enabled: next.consent.enabled }); }).catch(() => undefined);
-    return () => { live = false; };
+    const read = (event?: Event) => (event as CustomEvent<{ source?: string }> | undefined)?.detail?.source === "settings" ? undefined : void fetchIntroductions()
+      .then((next) => { if (live) setState({ available: next.available, enabled: next.consent.enabled }); }).catch(() => undefined);
+    read();
+    window.addEventListener(INTRODUCTIONS_CHANGED, read);
+    return () => { live = false; window.removeEventListener(INTRODUCTIONS_CHANGED, read); };
   }, []);
   if (!state || (!state.available && !state.enabled)) return null;
   const flip = () => {
@@ -398,7 +403,7 @@ function IntroductionsControl({ locale }: { locale: SupportedLocale }): JSX.Elem
     /* Home hears it too, so its bubble never speaks for the old switch. */
     void setIntroductionConsent(enabled).then(() => {
       setState({ ...state, enabled });
-      window.dispatchEvent(new CustomEvent(INTRODUCTIONS_CHANGED, { detail: { enabled } }));
+      window.dispatchEvent(new CustomEvent(INTRODUCTIONS_CHANGED, { detail: { enabled, source: "settings" } }));
     })
       .catch(() => setFailed(true)).finally(() => setBusy(false));
   };

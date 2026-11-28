@@ -2121,8 +2121,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /* ═══ INTRODUCTIONS (design "Agent introductions", approved 2026-11-27) ═══
      Two consenting people whose principles overlap. Only on your own home,
      never on an agent's wall and never offline; the server decides what may
-     be shown (`lib/introductions.ts`), and it says it in the reading's place. */
-  const intro = useIntroductions(atWall.kind === 'self' ? hunchProfile : null);
+     be shown (`lib/introductions.ts`), and it says it in the reading's place.
+     Introductions belong to the SESSION's own human profile: on any other
+     profile's view the hook does not run and nothing is drawn. */
+  const introSession = useOptionalAuth()?.profile;
+  const intro = useIntroductions(atWall.kind === 'self' && hunchProfile && introSession?.type === 'human'
+    && introSession.id === hunchProfile ? hunchProfile : null);
   /** The next line, or the one a dot names. */
   const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;

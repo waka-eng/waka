@@ -716,8 +716,28 @@ export async function enqueueIntroductionMatch(followUp: FollowUp | string,
     idempotencyKey: `match_introductions:${profileId}:${key}`, ...(runAfter ? { runAfter } : {}) }, transaction);
 }
 
-/** A newly held principle is a reason to look again, for a consenting person. */
-async function enqueueIntroductionMatchIfConsenting(profileId: string): Promise<void> {
+/**
+ * Turn the marks migration 0097's principle triggers leave (a principle
+ * withdrawn, or one becoming held for a consenting person) into ordinary
+ * match passes, through the one enqueue path. Bounded and skip-locked, so
+ * two drains never take the same mark. Called by the worker on every drain,
+ * after principle work, and when someone reads their introductions.
+ */
+export async function drainIntroductionFollowUps(
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
+): Promise<number> {
+  if (!introductionsAvailable()) return 0;
+  const db = transaction ?? getDb();
+  const rows = (await db.execute(sql`
+    DELETE FROM introduction_followups WHERE profile_id IN (
+      SELECT profile_id FROM introduction_followups ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED)
+    RETURNING profile_id AS "profileId"`)) as unknown as Array<{ profileId: string }>;
+  for (const row of rows) await enqueueIntroductionMatch({ profileId: row.profileId, key: "followup" }, transaction);
+  return rows.length;
+}
+
+/** A principle held again is a reason to look again, for a consenting person. */
+export async function enqueueIntroductionMatchIfConsenting(profileId: string): Promise<void> {
   if (!introductionsAvailable()) return;
   const db = getDb();
   const [consent] = await db.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
@@ -932,6 +952,11 @@ export async function drainBackgroundJobs(
     failed: 0,
     deferred: 0,
   };
+
+  /* Introductions' marks become jobs here, so every principle path (routes,
+     reconciles, generation) reaches the queue without each remembering to.
+     A real drain only; flag off, it reads nothing. */
+  if (!options.store) await drainIntroductionFollowUps().catch(() => 0);
 
   let deferrals = 0;
   let processed = 0;
@@ -1295,6 +1320,7 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
          again (introductions, flag-gated, no model call). Never fails the
          principle work it follows. */
       await enqueueIntroductionMatchIfConsenting(profileId).catch(() => undefined);
+      await drainIntroductionFollowUps().catch(() => 0);
       return;
     }
     case "enrich_attachment": {

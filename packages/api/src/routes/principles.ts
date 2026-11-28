@@ -69,6 +69,7 @@ import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
+import { enqueueIntroductionMatchIfConsenting } from "../lib/queue.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -358,6 +359,9 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const scope = await resolveProfileScope(getDatabase(), c.get("session"), query.data.profile, "write", loadProfile);
     if (!scope.ok) return c.json(scope.body, scope.status);
     const undone = await undoPrincipleDispute(getDatabase(), scope.profileId, params.data.principleId, params.data.disputeId);
+    /* A principle held again is a reason to look for an introduction again,
+       for a consenting owner (flag-gated, no model call; never fails this). */
+    if (undone) await enqueueIntroductionMatchIfConsenting(scope.profileId).catch(() => undefined);
     return undone ? c.json({ ok: true }) : c.json({ error: "Principle not found" }, 404);
   });
 

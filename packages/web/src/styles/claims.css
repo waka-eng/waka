@@ -8869,22 +8869,8 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   opacity: 0.85;
   animation: waka-intro-wait 1.2s ease-out 0.7s both;
 }
-/* Names under each, below the dots a tap steps through (`.jar-char-lines`,
-   a 28px row at the body's foot). */
-.waka-intro-label {
-  position: absolute;
-  top: calc(var(--jar-char-mid, 50%) + var(--jar-char, 120px) / 2 + var(--sp-2) + var(--sp-28));
-  transform: translateX(-50%);
-  font-size: var(--bubble-label);
-  line-height: var(--bubble-lh);
-  color: var(--moon-muted);
-  white-space: nowrap;
-}
-.waka-intro-label--you { left: 50%; }
-.waka-intro-label--guest { left: var(--intro-guest-x); animation: waka-intro-wait 1.2s ease-out both; }
-
 @media (prefers-reduced-motion: reduce) {
-  .waka-intro-edge, .waka-intro-guest, .waka-intro-bridge, .waka-intro-label--guest { animation: none; }
+  .waka-intro-edge, .waka-intro-guest, .waka-intro-bridge { animation: none; }
   .waka-intro-edge { transition: opacity 0.6s linear; }
   .waka-intro-edge--leaving { transform: translate(50%, -50%); }
 }

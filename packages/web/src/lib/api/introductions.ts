@@ -2,14 +2,15 @@
  * Client for `/api/introductions` — mirrors `packages/api/src/routes/introductions.ts`.
  *
  * WAKA introduces two consenting people whose principles overlap. Only
- * principles are compared, never saves; the other person is known only by a
- * first name, and only after both said Introduce us to that match.
+ * principles are compared, never saves; nothing about the other person is
+ * ever returned, not even a name: only this person's own principle words,
+ * once both said Introduce us to that match.
  */
 import { apiPath, getJson, postJson } from "./http";
 
 export type ApiIntroduction =
   | { id: string; stage: "ask" }
-  | { id: string; stage: "introduced"; name: string; principle: string };
+  | { id: string; stage: "introduced"; principle: string };
 
 export interface ApiIntroductionState {
   available: boolean;

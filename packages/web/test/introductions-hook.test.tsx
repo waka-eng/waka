@@ -63,8 +63,14 @@ it("starts from nothing for a new profile, and drops a read asked for the previo
   await mount("p1");
   vi.mocked(fetchIntroductions).mockResolvedValue(state({}));
   await mount("p2"); await flush();
-  await act(async () => release(state({ introduction: { id: "theirs", stage: "introduced", name: "Jun", principle: "x" } })));
+  await act(async () => release(state({ introduction: { id: "theirs", stage: "introduced", principle: "theirs" } })));
   await flush();
   expect(seen?.stage, "the previous person's introduction showed for the next").toBeNull();
-  expect(seen?.name).toBe("");
+  expect(seen?.principle).toBe("");
+});
+
+it("does nothing at all without the session's own profile", async () => {
+  await mount(null); await flush(10_000);
+  expect(vi.mocked(fetchIntroductions)).not.toHaveBeenCalled();
+  expect(seen?.stage).toBeNull();
 });

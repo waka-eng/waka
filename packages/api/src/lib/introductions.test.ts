@@ -2,7 +2,7 @@
  * principle statements, no model call. Pure, so no database. */
 import { describe, expect, it } from "vitest";
 
-import { OVERLAP_FLOOR, firstName, introductionsAvailable, negated, principleOverlap, principleWords, stem } from "./introductions.js";
+import { OVERLAP_FLOOR, introductionsAvailable, negated, principleOverlap, principleWords, stem } from "./introductions.js";
 
 describe("principle overlap", () => {
   it("finds one principle said two ways", () => {
@@ -41,6 +41,9 @@ describe("negation and word forms", () => {
     expect(negated("남의 실수를 탓하지 않는다")).toBe(true);
     expect(negated("약속을 못 지킨다")).toBe(true);
     expect(negated("변명 없이 사과한다")).toBe(true);
+    expect(negated("끊임없이 배운다")).toBe(false);
+    expect(negated("아낌없이 칭찬한다")).toBe(false);
+    expect(negated("마음 안의 목소리를 듣는다")).toBe(false);
   });
 
   it("does not let Korean endings and function words make two principles alike", () => {
@@ -64,14 +67,12 @@ describe("negation and word forms", () => {
     expect(stem("speed")).toBe("speed");
     expect(stem("running")).toBe(stem("run"));
     expect(stem("planned")).toBe(stem("plan"));
+    expect(stem("focusing")).toBe(stem("focus"));
+    expect(stem("focused")).toBe(stem("focus"));
+    expect(stem("focus")).toBe("focus");
+    expect(stem("basis")).toBe("basis");
+    expect(stem("status")).toBe("status");
     expect(principleOverlap("Create value for the people you serve.", "Creating values that serve people matters.")).toBeGreaterThanOrEqual(OVERLAP_FLOOR);
-  });
-});
-
-describe("what is said about the other person", () => {
-  it("is a first name only", () => {
-    expect(firstName("  Jun  Park ")).toBe("Jun");
-    expect(firstName("")).toBe("");
   });
 });
 

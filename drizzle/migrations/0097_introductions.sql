@@ -6,6 +6,11 @@ CREATE TABLE "introduction_consents" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "introduction_followups" (
+	"profile_id" uuid PRIMARY KEY NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "introductions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"profile_a_id" uuid NOT NULL,
@@ -21,6 +26,8 @@ CREATE TABLE "introductions" (
 	"answered_b_at" timestamp with time zone,
 	"seen_a_at" timestamp with time zone,
 	"seen_b_at" timestamp with time zone,
+	"withdrawn_a_at" timestamp with time zone,
+	"withdrawn_b_at" timestamp with time zone,
 	"closed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -30,6 +37,7 @@ CREATE TABLE "introductions" (
 );
 --> statement-breakpoint
 ALTER TABLE "introduction_consents" ADD CONSTRAINT "introduction_consents_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "introduction_followups" ADD CONSTRAINT "introduction_followups_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_a_id_profiles_id_fk" FOREIGN KEY ("profile_a_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_b_id_profiles_id_fk" FOREIGN KEY ("profile_b_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_a_fk" FOREIGN KEY ("profile_a_id","principle_a_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -54,59 +62,54 @@ CREATE TRIGGER "introduction_consents_humans_only" BEFORE INSERT OR UPDATE OF "p
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
 CREATE TRIGGER "introductions_humans_only" BEFORE INSERT OR UPDATE OF "profile_a_id", "profile_b_id" ON "introductions"
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
--- WITHDRAWING A PRINCIPLE (rewording it, deleting it, or it ceasing to be
--- held: contested, aspirational again, or unsupported) withdraws it from every
--- introduction that cites it: that side's id and words are nulled, so no copy
--- of withdrawn words is kept, and the row is closed for both. The row stays,
--- so the pair is never offered again. Runs BEFORE a delete so the composite
--- foreign key (no action) never sees a dangling citation.
+-- A PRINCIPLE LEAVING OR JOINING WHAT A PERSON HOLDS.
 --
--- Both people are free again, so each gets a match pass, written straight to
--- the queue in the same transaction. Such a row only exists where matching
--- ran (WAKA_INTRODUCTIONS=1), and the job reads the flag again before it
--- does anything. A profile already gone (an account being erased) gets none.
-CREATE OR REPLACE FUNCTION "withdraw_principle_from_introductions"() RETURNS trigger LANGUAGE plpgsql AS $$
+-- Leaving (rewording it, deleting it, or it ceasing to be held: contested,
+-- aspirational, unsupported) withdraws THAT SIDE of every introduction that
+-- cites it: its id and words are nulled, so no copy of withdrawn words is
+-- kept, and withdrawn_x_at is set. The other side is not touched: their ask
+-- stays answerable and a yes just waits, until the ordinary lapse, so a
+-- withdrawal looks exactly like silence. The row stays, so the pair is never
+-- offered again. Runs BEFORE a delete so the composite foreign key (no
+-- action) never sees a dangling citation.
+--
+-- Joining (a principle becoming held, by any path) is a reason to look again
+-- for someone with introductions on.
+--
+-- Either way the person is only MARKED, in introduction_followups; the
+-- application turns marks into ordinary queue jobs (drainIntroductionFollowUps
+-- in lib/queue.ts), so the queue keeps one enqueue path. A profile already
+-- gone (an account being erased) is never marked.
+CREATE OR REPLACE FUNCTION "principle_introductions_follow"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-  freed uuid;
+  was_held boolean := TG_OP <> 'INSERT' AND OLD."state" = 'held' AND OLD."unsupported_at" IS NULL;
+  is_held boolean := TG_OP <> 'DELETE' AND NEW."state" = 'held' AND NEW."unsupported_at" IS NULL;
+  owner uuid := CASE WHEN TG_OP = 'DELETE' THEN OLD."profile_id" ELSE NEW."profile_id" END;
+  withdrawn integer := 0;
 BEGIN
-  IF TG_OP = 'UPDATE' AND OLD."statement" IS NOT DISTINCT FROM NEW."statement"
-     AND NOT (OLD."state" = 'held' AND OLD."unsupported_at" IS NULL
-              AND (NEW."state" <> 'held' OR NEW."unsupported_at" IS NOT NULL)) THEN
-    RETURN NULL;
+  IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND (OLD."statement" IS DISTINCT FROM NEW."statement" OR (was_held AND NOT is_held))) THEN
+    UPDATE "introductions" SET
+      "principle_a_id" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_id" END,
+      "principle_a_text" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_text" END,
+      "withdrawn_a_at" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN coalesce("withdrawn_a_at", now()) ELSE "withdrawn_a_at" END,
+      "principle_b_id" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_id" END,
+      "principle_b_text" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_text" END,
+      "withdrawn_b_at" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN coalesce("withdrawn_b_at", now()) ELSE "withdrawn_b_at" END,
+      "updated_at" = now()
+     WHERE ("profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id")
+        OR ("profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id");
+    GET DIAGNOSTICS withdrawn = ROW_COUNT;
   END IF;
-  FOR freed IN
-    WITH closed AS (
-      UPDATE "introductions" SET
-        "principle_a_id" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_id" END,
-        "principle_a_text" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_text" END,
-        "principle_b_id" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_id" END,
-        "principle_b_text" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_text" END,
-        "closed_at" = coalesce("closed_at", now()),
-        "updated_at" = now()
-       WHERE ("profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id")
-          OR ("profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id")
-      RETURNING "profile_a_id", "profile_b_id"
-    )
-    SELECT DISTINCT x FROM closed, LATERAL (VALUES ("profile_a_id"), ("profile_b_id")) AS v(x)
-  LOOP
-    INSERT INTO "background_jobs" ("profile_id", "type", "payload", "max_attempts", "idempotency_key")
-    SELECT freed, 'match_introductions', '{"reason":"withdrawn"}'::jsonb, 3, 'match_introductions:' || freed || ':withdrawn'
-     WHERE EXISTS (SELECT 1 FROM "profiles" WHERE "id" = freed)
-    ON CONFLICT ("idempotency_key") WHERE "idempotency_key" IS NOT NULL DO UPDATE SET
-      "status" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN 'pending'::background_job_status ELSE "background_jobs"."status" END,
-      "attempts" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN 0 ELSE "background_jobs"."attempts" END,
-      "run_after" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN now() ELSE "background_jobs"."run_after" END,
-      "locked_at" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN NULL ELSE "background_jobs"."locked_at" END,
-      "last_error" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN NULL ELSE "background_jobs"."last_error" END,
-      "rerun_requested" = ("background_jobs"."status" = 'running'),
-      "request_version" = "background_jobs"."request_version" + 1,
-      "updated_at" = now();
-  END LOOP;
+  IF (withdrawn > 0 OR (is_held AND NOT was_held AND EXISTS (
+        SELECT 1 FROM "introduction_consents" c WHERE c."profile_id" = owner AND c."enabled")))
+     AND EXISTS (SELECT 1 FROM "profiles" WHERE "id" = owner) THEN
+    INSERT INTO "introduction_followups" ("profile_id") VALUES (owner) ON CONFLICT ("profile_id") DO NOTHING;
+  END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER "principles_withdraw_from_introductions_on_delete" BEFORE DELETE ON "principles"
-  FOR EACH ROW EXECUTE FUNCTION "withdraw_principle_from_introductions"();--> statement-breakpoint
-CREATE TRIGGER "principles_withdraw_from_introductions_on_change" AFTER UPDATE OF "statement", "state", "unsupported_at" ON "principles"
-  FOR EACH ROW EXECUTE FUNCTION "withdraw_principle_from_introductions"();
+CREATE TRIGGER "principles_introductions_on_delete" BEFORE DELETE ON "principles"
+  FOR EACH ROW EXECUTE FUNCTION "principle_introductions_follow"();--> statement-breakpoint
+CREATE TRIGGER "principles_introductions_on_change" AFTER INSERT OR UPDATE OF "statement", "state", "unsupported_at" ON "principles"
+  FOR EACH ROW EXECUTE FUNCTION "principle_introductions_follow"();

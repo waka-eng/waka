@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createIntroductionRoutes } from "../routes/introductions.js";
 import { INTRODUCTION_WINDOW_DAYS, matchIntroductionsForProfile, readIntroductionState, setIntroductionConsent, type FollowUp } from "./introductions.js";
-import { enqueueIntroductionMatch } from "./queue.js";
+import { drainIntroductionFollowUps, enqueueIntroductionMatch } from "./queue.js";
 import type { AuthEnv } from "./middleware.js";
 
 let t: TestDatabase, sequence = 0;
@@ -181,46 +181,72 @@ describe("matching", () => {
     expect([row!.profile_a_id, row!.profile_b_id]).toContain(fresh.profileId);
   });
 
-  it("withdrawing a principle keeps the pair but erases the withdrawn words and closes the row; it is never offered again", async () => {
-    const { a, b, id } = await pair();
-    const [pa] = await t.sql`SELECT id FROM principles WHERE profile_id=${a.profileId}`;
-    await t.sql`UPDATE principles SET statement='Something else entirely now.' WHERE id=${pa!.id}`;
-    const [row] = await t.sql`SELECT * FROM introductions WHERE id=${id}`;
-    const aSide = row!.profile_a_id === a.profileId ? "a" : "b";
-    expect(row![`principle_${aSide}_text`], "a copy of withdrawn words").toBeNull();
-    expect(row![`principle_${aSide}_id`]).toBeNull();
-    expect(row!.closed_at).not.toBeNull();
-    expect((await routed(b).state()).introduction, "a closed row shows nothing to the other side").toBeNull();
-    await principle(a, FINISH);
-    expect(await match(a), "the pair is never offered again").toBe("none");
-    /* Deleting works the same way, and an accepted, unseen introduction just closes. */
-    await t.truncateAll();
-    const c = await person("Mina Kim"), d = await person("Dae Han");
-    await principle(c, FINISH); const pd = await principle(d, FINISH_TOO);
-    await consent(c); await consent(d);
-    expect(await match(c)).toBe("matched");
-    await t.sql`UPDATE introductions SET answer_a='yes', answer_b='yes', answered_a_at=now(), answered_b_at=now(), status='accepted'
-      WHERE profile_a_id IN (${c.profileId},${d.profileId}) AND profile_b_id IN (${c.profileId},${d.profileId})`;
-    await t.sql`DELETE FROM principles WHERE id=${pd}`;
-    expect((await routed(c).state()).introduction).toBeNull();
-    expect(await t.sql`SELECT id FROM introductions WHERE closed_at IS NOT NULL AND (principle_a_text IS NULL OR principle_b_text IS NULL)`).toHaveLength(1);
-  });
-
-  it("a principle that stops being held closes the introduction like a withdrawal, and both sides are looked at again", async () => {
-    for (const change of ["state = 'contested'", "unsupported_at = now()", "statement = 'Different words now.'"]) {
+  it("a withdrawal is silent: the other side's view is byte-identical to the withdrawer saying nothing, until the ordinary lapse", async () => {
+    const observe = async (how: string | null) => {
       await t.truncateAll();
       const { a, b, id } = await pair();
-      await t.sql`DELETE FROM background_jobs`;
-      await t.sql.unsafe(`UPDATE principles SET ${change} WHERE profile_id = '${b.profileId}'`);
+      const rb = routed(b);
+      const before = await rb.raw();
+      if (how) await t.sql.unsafe(how.replace("$A", a.profileId));
+      const view = await rb.raw();
+      const answered = await (await rb.post(`/${id}/answer`, { answer: "yes" })).json();
+      const after = await rb.raw();
       const [row] = await t.sql`SELECT * FROM introductions WHERE id=${id}`;
-      const bSide = row!.profile_a_id === b.profileId ? "a" : "b";
-      expect(row!.closed_at, change).not.toBeNull();
-      expect(row![`principle_${bSide}_text`], change).toBeNull();
-      const jobs = await t.sql`SELECT profile_id FROM background_jobs WHERE type='match_introductions' ORDER BY profile_id`;
-      expect(jobs.map((j) => j.profile_id), change).toEqual([a.profileId, b.profileId].sort());
-      expect((await routed(a).state()).introduction, change).toBeNull();
+      const aSide = row!.profile_a_id === a.profileId ? "a" : "b";
+      return { a, b, id, same: view === before, answered, after, row, aSide, busy: await match(b) };
+    };
+    const silent = await observe(null);
+    for (const how of [
+      "UPDATE principles SET statement = 'Something else entirely now.' WHERE profile_id = '$A'",
+      "DELETE FROM principles WHERE profile_id = '$A'",
+      "UPDATE principles SET state = 'contested' WHERE profile_id = '$A'",
+      "UPDATE principles SET unsupported_at = now() WHERE profile_id = '$A'",
+    ]) {
+      const withdrew = await observe(how);
+      expect(withdrew.same, how).toBe(true);
+      expect(withdrew.answered, how).toEqual(silent.answered);
+      expect(withdrew.after, how).toEqual(silent.after);
+      expect(withdrew.busy, `${how}: the other side was freed early`).toBe("busy");
+      expect(withdrew.row!.closed_at, how).toBeNull();
+      expect([withdrew.row![`principle_${withdrew.aSide}_text`], withdrew.row![`principle_${withdrew.aSide}_id`]], `${how}: withdrawn words kept`).toEqual([null, null]);
+      expect(withdrew.row![`withdrawn_${withdrew.aSide}_at`], how).not.toBeNull();
+      /* The withdrawer is free now, and marked to be looked at again. */
+      expect((await routed(withdrew.a).state()).introduction, how).toBeNull();
+      expect((await t.sql`SELECT profile_id FROM introduction_followups`).map((r) => r.profile_id), how).toEqual([withdrew.a.profileId]);
+      expect(await t.sql`SELECT id FROM background_jobs WHERE type='match_introductions'`, `${how}: the trigger enqueued`).toHaveLength(0);
     }
   });
+
+  it("a withdrawn side can never complete the introduction, and the pair is never offered again", async () => {
+    const { a, b, id } = await pair();
+    await routed(a).post(`/${id}/answer`, { answer: "yes" });
+    await t.sql`UPDATE principles SET statement = 'Something else entirely now.' WHERE profile_id = ${a.profileId}`;
+    expect(await (await routed(b).post(`/${id}/answer`, { answer: "yes" })).json()).toEqual({ stage: "waiting" });
+    await principle(a, FINISH);
+    await t.sql`UPDATE introductions SET created_at = created_at - ${past}::interval WHERE id=${id}`;
+    expect(await match(a), "the pair is never offered again").toBe("none");
+  });
+
+  it("marks a consenting person whose principle becomes held, and the drain turns marks into ordinary jobs", async () => {
+    const p = await person(), off = await person();
+    await consent(p); await consent(off, false);
+    const pid = await principle(p, FINISH, "aspirational");
+    await principle(off, FINISH);
+    expect(await t.sql`SELECT profile_id FROM introduction_followups`).toHaveLength(0);
+    await t.sql`UPDATE principles SET state = 'held' WHERE id = ${pid}`;
+    expect((await t.sql`SELECT profile_id FROM introduction_followups`).map((r) => r.profile_id)).toEqual([p.profileId]);
+    const before = process.env.WAKA_INTRODUCTIONS;
+    process.env.WAKA_INTRODUCTIONS = "1";
+    try {
+      expect(await drainIntroductionFollowUps(t.db as never)).toBe(1);
+      expect(await drainIntroductionFollowUps(t.db as never)).toBe(0);
+    } finally { if (before === undefined) delete process.env.WAKA_INTRODUCTIONS; else process.env.WAKA_INTRODUCTIONS = before; }
+    expect(await t.sql`SELECT idempotency_key FROM background_jobs WHERE type='match_introductions'`)
+      .toEqual([{ idempotency_key: `match_introductions:${p.profileId}:followup` }]);
+    expect(await t.sql`SELECT profile_id FROM introduction_followups`).toHaveLength(0);
+  });
+
+
 
   it("erasing a person takes their introductions with them", async () => {
     const { a } = await pair();
@@ -234,15 +260,15 @@ describe("answering", () => {
     const { a, b, id } = await pair();
     const ra = routed(a), rb = routed(b);
     expect((await ra.state()).introduction).toEqual({ id, stage: "ask" });
-    for (const leak of ["Jun", FINISH_TOO]) expect(await ra.raw(), `the ask carries ${leak}`).not.toContain(leak);
+    for (const leak of ["Jun", "Park", FINISH_TOO]) expect(await ra.raw(), `the ask carries ${leak}`).not.toContain(leak);
     expect(await (await ra.post(`/${id}/answer`, { answer: "yes" })).json()).toEqual({ stage: "waiting" });
     expect(ra.requestMatch, "a yes queues its own lapse pass").toHaveBeenCalledWith(expect.objectContaining({ profileId: a.profileId, key: `asked:${id}` }));
     expect((await ra.state()).introduction, "waiting is invisible").toBeNull();
     expect(await (await rb.post(`/${id}/answer`, { answer: "yes" })).json())
-      .toEqual({ id, stage: "introduced", name: "Yunji", principle: FINISH_TOO });
-    expect((await ra.state()).introduction).toEqual({ id, stage: "introduced", name: "Jun", principle: FINISH });
+      .toEqual({ id, stage: "introduced", principle: FINISH_TOO });
+    expect((await ra.state()).introduction).toEqual({ id, stage: "introduced", principle: FINISH });
     const seen = await ra.raw();
-    for (const leak of [FINISH_TOO, "Park", b.profileId]) expect(seen, `A's introduction carries ${leak}`).not.toContain(leak);
+    for (const leak of [FINISH_TOO, "Jun", "Park", b.profileId]) expect(seen, `A's introduction carries ${leak}`).not.toContain(leak);
     expect((await ra.post(`/${id}/seen`)).status).toBe(200);
     expect((await ra.state()).introduction).toBeNull();
     expect((await rb.state()).introduction, "B's Done is B's own").toMatchObject({ stage: "introduced" });
@@ -351,11 +377,14 @@ describe("answering", () => {
     const p2 = await pair(["Mina Kim", "Dae Han"]);
     await routed(p2.a).post(`/${p2.id}/answer`, { answer: "yes" });
     await routed(p2.b).post(`/${p2.id}/answer`, { answer: "yes" });
-    expect((await routed(p2.b).state()).introduction).toMatchObject({ stage: "introduced", name: "Mina" });
+    expect((await routed(p2.b).state()).introduction).toMatchObject({ stage: "introduced" });
     const revoker = routed(p2.a);
     await revoker.post("/consent", { enabled: false });
-    expect((await routed(p2.b).state()).introduction, "the revoker's name is still shown").toBeNull();
+    expect((await routed(p2.b).state()).introduction, "the introduction outlived the revocation").toBeNull();
     expect(revoker.requestMatch, "the other side is free and looked at again").toHaveBeenCalledWith({ profileId: p2.b.profileId, key: "now" });
+    const [row] = await t.sql`SELECT * FROM introductions WHERE id=${p2.id}`;
+    const side = row!.profile_a_id === p2.a.profileId ? "a" : "b";
+    expect([row![`principle_${side}_text`], row![`principle_${side}_id`]], "the revoker's words outlived the revocation").toEqual([null, null]);
   });
 
   it("refuses anyone who is not a side of it, and answers an outsider exactly as for a missing row", async () => {
@@ -401,12 +430,12 @@ describe("who may ask", () => {
     expect((await r.post("/consent", { enabled: true })).status).toBe(401);
   });
 
-  it("returns nothing about the other person beyond a first name and the principle", async () => {
+  it("returns nothing about the other person, not even a name: only this person's own principle", async () => {
     const { a, b, id } = await pair();
     await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${b.profileId},'A private save about my sister')`;
     await t.sql`UPDATE introductions SET answer_a='yes', answer_b='yes', answered_a_at=now(), answered_b_at=now(), status='accepted' WHERE id=${id}`;
     const state = await readIntroductionState(t.db as never, a.profileId, true);
-    expect(Object.keys(state.introduction ?? {}).sort()).toEqual(["id", "name", "principle", "stage"]);
-    expect(JSON.stringify(state)).not.toMatch(/sister|Park|@example/);
+    expect(Object.keys(state.introduction ?? {}).sort()).toEqual(["id", "principle", "stage"]);
+    expect(JSON.stringify(state)).not.toMatch(/sister|Jun|Park|@example/);
   });
 });

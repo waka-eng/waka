@@ -11,7 +11,9 @@
  *      the edge.
  *   2. The introduction. Their creature comes in beside yours, joined by a
  *      warm to cool light, under "You both hold" and the principle in plain
- *      words. A first name, nothing else.
+ *      words. NO NAME AT ALL (review, 2026-11-28): a "first name" leaked whole
+ *      names, and with no way to message there is nothing a name is for. The
+ *      guest carries no label.
  *   3. Saying no. Their light fades off the edge, and turning introductions
  *      off is one press.
  *
@@ -78,16 +80,13 @@ export function IntroductionScene({ intro, locale, size }: { intro: Introduction
   /* Your body's half width, a breath, then the guest's: `aspect` 1.15 puts
      each half at about 0.58 of the size. */
   const reach = Math.round(size * 0.58 + size * 0.1 + guest * 0.58);
-  const name = intro.name || t(locale, "introSomeone");
   const style = { "--intro-size": `${size}px`, "--intro-guest": `${guest}px`, "--intro-reach": `${reach}px` } as CSSProperties;
   return (
     <span className="waka-intro-scene" style={style}>
       <span className="waka-intro-bridge" aria-hidden="true" />
       <span className="waka-intro-guest">
-        <Companion size={guest} cool pressable={false} label={name} />
+        <Companion size={guest} cool pressable={false} label={t(locale, "introSomeone")} />
       </span>
-      <span className="waka-intro-label waka-intro-label--you" aria-hidden="true">{t(locale, "introYou")}</span>
-      <span className="waka-intro-label waka-intro-label--guest">{name}</span>
     </span>
   );
 }

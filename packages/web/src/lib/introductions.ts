@@ -47,8 +47,6 @@ const POLL_FOR_MS = 60_000;
 
 export interface Introductions {
   stage: IntroductionStage | null;
-  /** The other person's first name, on `introduced` only. */
-  name: string;
   /** This person's own words for the principle they share, on `introduced` only. */
   principle: string;
   busy: boolean;
@@ -59,6 +57,11 @@ export interface Introductions {
 }
 
 type Local = Exclude<IntroductionStage, "ask-consent" | "ask-match" | "introduced">;
+
+/* Tells Settings (and anything else listening) that the switch moved. Home's
+   own listener ignores its own announcement by `source`. */
+const announce = (enabled: boolean) =>
+  window.dispatchEvent(new CustomEvent(INTRODUCTIONS_CHANGED, { detail: { enabled, source: "home" } }));
 
 /** `profileId` is the signed-in person's own profile on their own home, or null. */
 export function useIntroductions(profileId: string | null): Introductions {
@@ -94,6 +97,7 @@ export function useIntroductions(profileId: string | null): Introductions {
     load();
     const back = () => { if (document.visibilityState === "visible") load(); };
     const changed = (event: Event) => {
+      if ((event as CustomEvent<{ source?: string }>).detail?.source === "home") return;
       setLocal(null);
       if ((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled) pollAwhile(); else load();
     };
@@ -120,6 +124,7 @@ export function useIntroductions(profileId: string | null): Introductions {
   const introduce = useCallback(() => run(async () => {
     if (stage === "ask-consent") {
       await setIntroductionConsent(true);
+      announce(true);
       setServer((s) => s && { ...s, offerConsent: false, consent: { enabled: true, answered: true } });
       setLocal("on");
       pollAwhile();
@@ -153,6 +158,7 @@ export function useIntroductions(profileId: string | null): Introductions {
 
   const turnOff = useCallback(() => run(async () => {
     await setIntroductionConsent(false);
+    announce(false);
     window.clearTimeout(poll.current.timer);
     setServer((s) => s && { ...s, introduction: null, offerConsent: false, consent: { enabled: false, answered: true } });
     setLocal("off");
@@ -160,7 +166,6 @@ export function useIntroductions(profileId: string | null): Introductions {
 
   return {
     stage,
-    name: intro?.stage === "introduced" ? intro.name : "",
     principle: intro?.stage === "introduced" ? intro.principle : "",
     busy, introduce, notNow, done, turnOff,
   };

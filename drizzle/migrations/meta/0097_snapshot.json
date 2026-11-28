@@ -1,5 +1,5 @@
 {
-  "id": "39bd788d-585a-4903-ac5b-fb9b18afa5c3",
+  "id": "ad1cc95d-073f-419c-8f73-08696af5fbd9",
   "prevId": "f76e35f5-a403-48d9-a718-52dc4510a0ba",
   "version": "7",
   "dialect": "postgresql",
@@ -9950,6 +9950,46 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.introduction_followups": {
+      "name": "introduction_followups",
+      "schema": "",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "introduction_followups_profile_id_profiles_id_fk": {
+          "name": "introduction_followups_profile_id_profiles_id_fk",
+          "tableFrom": "introduction_followups",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.introductions": {
       "name": "introductions",
       "schema": "",
@@ -10036,6 +10076,18 @@
         },
         "seen_b_at": {
           "name": "seen_b_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "withdrawn_a_at": {
+          "name": "withdrawn_a_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "withdrawn_b_at": {
+          "name": "withdrawn_b_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

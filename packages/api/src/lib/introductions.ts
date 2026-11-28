@@ -25,21 +25,27 @@
  *     lapse is identical whether the other side said no, said nothing, or
  *     turned introductions off. The only thing the other side's answer can
  *     do is complete an introduction, and only a yes does that.
- *  6. WHAT IS EVER SAID ABOUT THE OTHER PERSON: their first name, and that
- *     they hold the principle. Each side reads the principle in its OWN words;
- *     the other side's wording is stored for them and returned only to them.
+ *  6. NOTHING IS EVER SAID ABOUT THE OTHER PERSON beyond the fact that they
+ *     hold the principle. No name at all: a "first name" leaked whole names
+ *     (Korean names have no space, some orders put the surname first), and
+ *     with no way to message there is nothing a name would be for. Each side
+ *     reads the principle in its OWN words; the other side's wording is
+ *     stored for them and returned only to them.
  *  7. ONE AT A TIME. A person with an open ask, a waiting yes or an unseen
  *     introduction is not matched again until it settles or lapses, and a
  *     pair is offered once, ever (the row is kept even when a principle is
  *     withdrawn; only the withdrawn words are erased, see migration 0097).
+ *  8. A WITHDRAWAL IS SILENT. A principle reworded, deleted or no longer held
+ *     withdraws only its own side; the other side's view is computed exactly
+ *     as before and lapses at the ordinary time.
  *
  * Matching runs on the queue (`match_introductions`), and only where
  * `WAKA_INTRODUCTIONS=1`. With the flag unset the routes report the feature
  * unavailable, nothing is enqueued and a queued job does nothing.
  */
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 
-import { introductionConsents, introductions, principles, profiles } from "../db/index.js";
+import { introductionConsents, introductions, principles } from "../db/index.js";
 import type { IntroductionAnswer } from "../db/index.js";
 import type { getDb } from "./db.js";
 
@@ -68,14 +74,16 @@ const STOP = new Set(("a an and are as at be been but by can do does doing for f
   "they thing things this those to too very was we were what when where which while who why will with would you your " +
   "yourself always even every much many each other ever own same such only also both all any i'd i'm you'd you're it's").split(" "));
 const NEGATIONS = new Set(["not", "no", "never", "nothing", "nobody", "none", "neither", "nor", "without", "cannot"]);
-/* Korean negation, read as a whole word or a word's ending, never as a
-   piece inside another word (잘못 "a mistake" is not 못 "cannot"): the
-   adverbs 안 and 못 standing alone, any form of 않다, 못하다 and 없다/없는/
-   없이 at the end of a word. */
-const KOREAN_NEGATION_WORDS = new Set(["안", "못", "아니다", "아닌", "아니라"]);
-const KOREAN_NEGATION_ENDING = /(않|못하|못한|못해|없다|없는|없이|없고|없어|없게|없음)[가-힣]*$/u;
+/* Korean negation, read as a whole word, never as a piece inside another
+   word (잘못 "a mistake" is not 못 "cannot"): 못 standing alone, 아니다, a
+   word that begins with 않/못하 (or 지않 run together), and 없다/없는/없이
+   standing alone. */
+/* 안 is not read at all: as its own word it is as often "inside" (마음 안)
+   as "not". 없다 counts only as a word of its own (변명 없이), never inside an
+   adverb (끊임없이, 아낌없이). */
+const KOREAN_NEGATION_WORDS = new Set(["못", "아니다", "아닌", "아니라", "아니고"]);
 const koreanNegated = (word: string) => KOREAN_NEGATION_WORDS.has(word)
-  || (!/^잘못/u.test(word) && KOREAN_NEGATION_ENDING.test(word));
+  || /^(않|못하|못한|못해|못했)/u.test(word) || /지않/u.test(word) || /^없[가-힣]*$/u.test(word);
 
 /* Korean function pieces: whole words that carry no content, the endings and
    particles taken off a word's end before it is cut into pieces, and pieces
@@ -107,7 +115,7 @@ export function stem(word: string): string {
   let w = word;
   if (w.length > 4 && w.endsWith("ies")) w = `${w.slice(0, -3)}y`;
   else if (w.length > 4 && /(ss|sh|ch|x|z)es$/.test(w)) w = w.slice(0, -2);
-  else if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+  else if (w.length > 3 && w.endsWith("s") && !/(ss|us|is)$/.test(w)) w = w.slice(0, -1);
   /* -ed only where a real base of four or more letters is left and the word
      is not one that merely ends in "eed" (speed, need). A doubled final
      consonant is undone only on a base longer than three letters, so
@@ -170,6 +178,7 @@ type Row = typeof introductions.$inferSelect;
 function mine(row: Row, profileId: string) {
   const a = row.profileAId === profileId;
   return {
+    withdrawn: a ? row.withdrawnAAt : row.withdrawnBAt,
     answer: a ? row.answerA : row.answerB, answeredAt: a ? row.answeredAAt : row.answeredBAt,
     seen: a ? row.seenAAt : row.seenBAt, text: a ? row.principleAText : row.principleBText,
     otherId: a ? row.profileBId : row.profileAId,
@@ -179,6 +188,7 @@ const within = (from: Date | null, now: Date) => Boolean(from) && now.getTime() 
 export function sideState(row: Row, profileId: string, now: Date): "ask" | "waiting" | "introduced" | null {
   if (row.closedAt) return null;
   const me = mine(row, profileId);
+  if (me.withdrawn) return null;
   if (row.status === "accepted") return me.seen ? null : "introduced";
   if (me.answer === null) return within(row.createdAt, now) ? "ask" : null;
   /* A yes waits only as long as the ask was open: both end at createdAt + window. */
@@ -187,13 +197,12 @@ export function sideState(row: Row, profileId: string, now: Date): "ask" | "wait
 }
 /* The same three conditions in SQL, for the matcher's "busy". Keep in step
    with `sideState`. */
-const BUSY = (column: string) => {
-  const w = `interval '${INTRODUCTION_WINDOW_DAYS} days'`;
-  const side = (s: "a" | "b") => `(i.profile_${s}_id = ${column} AND (
-      (i.status = 'accepted' AND i.seen_${s}_at IS NULL)
-      OR (i.status <> 'accepted' AND i.answer_${s} IS NULL AND i.created_at > now() - ${w})
-      OR (i.status <> 'accepted' AND i.answer_${s} = 'yes' AND i.created_at > now() - ${w})))`;
-  return sql.raw(`EXISTS (SELECT 1 FROM introductions i WHERE i.closed_at IS NULL AND (${side("a")} OR ${side("b")}))`);
+const BUSY = (who: SQL) => {
+  const w = sql.raw(`interval '${INTRODUCTION_WINDOW_DAYS} days'`);
+  const side = (s: "a" | "b") => sql`(${sql.raw(`i.profile_${s}_id`)} = ${who} AND ${sql.raw(`i.withdrawn_${s}_at`)} IS NULL AND (
+      (i.status = 'accepted' AND ${sql.raw(`i.seen_${s}_at`)} IS NULL)
+      OR (i.status <> 'accepted' AND (${sql.raw(`i.answer_${s}`)} IS NULL OR ${sql.raw(`i.answer_${s}`)} = 'yes') AND i.created_at > now() - ${w})))`;
+  return sql`EXISTS (SELECT 1 FROM introductions i WHERE i.closed_at IS NULL AND (${side("a")} OR ${side("b")}))`;
 };
 
 /** A match pass to queue for a person who has just become free, or will at `runAfter`. */
@@ -214,8 +223,8 @@ const passAt = (profileId: string, key: string, from?: Date): FollowUp =>
 export type IntroductionView =
   /** A match waiting on this person. Nothing about the other side. */
   | { id: string; stage: "ask" }
-  /** Both said yes. Their first name and this person's own principle words. */
-  | { id: string; stage: "introduced"; name: string; principle: string };
+  /** Both said yes. This person's own principle words, and nothing about the other. */
+  | { id: string; stage: "introduced"; principle: string };
 
 export interface IntroductionState {
   available: boolean;
@@ -223,11 +232,6 @@ export interface IntroductionState {
   /** True once: the first ask, for a person who holds a principle and has never answered. */
   offerConsent: boolean;
   introduction: IntroductionView | null;
-}
-
-/** First name only: the board's "a first name. Nothing else." */
-export function firstName(name: string): string {
-  return name.trim().split(/\s+/u)[0] ?? "";
 }
 
 const involves = (profileId: string) => or(eq(introductions.profileAId, profileId), eq(introductions.profileBId, profileId));
@@ -268,8 +272,7 @@ export async function readIntroductionState(db: Pick<Db, "select" | "execute">, 
     if (sideState(row, profileId, now) !== "introduced") continue;
     const me = mine(row, profileId);
     if (!me.text) continue;
-    const [other] = await db.select({ name: profiles.name }).from(profiles).where(eq(profiles.id, me.otherId)).limit(1);
-    state.introduction = { id: row.id, stage: "introduced", name: firstName(other?.name ?? ""), principle: me.text };
+    state.introduction = { id: row.id, stage: "introduced", principle: me.text };
     return state;
   }
   for (const row of rows) {
@@ -317,6 +320,11 @@ export async function setIntroductionConsent(db: Db, profileId: string, enabled:
                status = CASE WHEN status = 'offered' THEN 'declined' ELSE status END, updated_at = now()
          WHERE ${sql.raw(`profile_${s}_id`)} = ${profileId}::uuid AND closed_at IS NULL AND status <> 'accepted'
            AND (${sql.raw(`answer_${s}`)} IS NULL OR ${sql.raw(`answer_${s}`)} = 'yes')`);
+      /* No copy of the revoker's principle words outlives the revocation; the
+         rows stay, so a pair is still never offered twice. */
+      await tx.execute(sql`
+        UPDATE introductions SET ${sql.raw(`principle_${s}_id`)} = NULL, ${sql.raw(`principle_${s}_text`)} = NULL, updated_at = now()
+         WHERE ${sql.raw(`profile_${s}_id`)} = ${profileId}::uuid AND ${sql.raw(`principle_${s}_text`)} IS NOT NULL`);
     }
     return closed.filter((row) => !row.otherSeen).map((row) => passAt(row.other, "now"));
   });
@@ -342,12 +350,13 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
     const a = row.profileAId === profileId;
     const otherId = a ? row.profileBId : row.profileAId;
     const otherAnswer = a ? row.answerB : row.answerA;
+    const otherWithdrawn = Boolean(a ? row.withdrawnBAt : row.withdrawnAAt);
     /* Only the other side's yes completes it, and only while they still have
        introductions on: a yes from someone who has since turned them off just
        lapses, as if they had never answered. */
     const [otherConsent] = await tx.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
       .where(eq(introductionConsents.profileId, otherId)).limit(1);
-    const completes = answer === "yes" && otherAnswer === "yes" && Boolean(otherConsent?.enabled);
+    const completes = answer === "yes" && otherAnswer === "yes" && !otherWithdrawn && Boolean(otherConsent?.enabled);
     const status = completes ? "accepted" : answer === "no" && row.status === "offered" ? "declined" : row.status;
     await tx.update(introductions).set({
       ...(a ? { answerA: answer, answeredAAt: sql`now()` } : { answerB: answer, answeredBAt: sql`now()` }),
@@ -406,65 +415,67 @@ export interface MatchOptions {
 
 export async function matchIntroductionsForProfile(db: Db, profileId: string, options: MatchOptions = {}): Promise<MatchResult> {
   if (!(options.available ?? introductionsAvailable())) return "off";
-  return db.transaction(async (tx) => {
-    /* One matcher at a time across the install, so two passes can never both
-       hand the same person a new ask. The pass reads no saves and calls no
-       model, so holding it is short. */
-    await lockIntroductions(tx);
-    const settle = async (result: MatchResult) => { await options.beforeCommit?.(tx); return result; };
-    const [me] = await tx.execute(sql`
-      SELECT p.account_id AS "accountId", ${BUSY("p.id")} AS busy
-        FROM profiles p JOIN introduction_consents c ON c.profile_id = p.id AND c.enabled
-       WHERE p.id = ${profileId}::uuid AND p.type = 'human' AND p.account_id IS NOT NULL`) as unknown as Array<{ accountId: string; busy: boolean }>;
-    if (!me) return settle("not_consenting");
-    if (me.busy) return settle("busy");
-    const candidates = await tx.execute(sql`
-      SELECT p.id FROM profiles p JOIN introduction_consents c ON c.profile_id = p.id AND c.enabled
-       WHERE p.type = 'human' AND p.account_id IS NOT NULL AND p.account_id <> ${me.accountId}::uuid
-         AND p.id <> ${profileId}::uuid
-         AND NOT EXISTS (SELECT 1 FROM introductions i
-                          WHERE (i.profile_a_id = p.id AND i.profile_b_id = ${profileId}::uuid)
-                             OR (i.profile_b_id = p.id AND i.profile_a_id = ${profileId}::uuid))
-         AND NOT ${BUSY("p.id")}
-       ORDER BY c.updated_at DESC, p.id
-       LIMIT ${options.candidateLimit ?? CANDIDATES_PER_PASS}`) as unknown as Array<{ id: string }>;
-    if (!candidates.length) return settle("none");
-    const ids = [profileId, ...candidates.map((row) => row.id)];
-    /* Statements only: id, owner and words. Nothing else is selected. */
-    const held = await tx.select({ id: principles.id, profileId: principles.profileId, statement: principles.statement })
-      .from(principles)
-      .where(and(inArray(principles.profileId, ids), eq(principles.state, "held"), isNull(principles.unsupportedAt)))
-      .orderBy(asc(principles.rank), asc(principles.id));
-    const own = held.filter((row) => row.profileId === profileId);
-    if (!own.length) return settle("none");
-    let best: { score: number; mine: (typeof held)[number]; theirs: (typeof held)[number] } | null = null;
-    for (const theirs of held) {
-      if (theirs.profileId === profileId) continue;
-      for (const mineRow of own) {
-        const score = principleOverlap(mineRow.statement, theirs.statement);
-        if (score >= OVERLAP_FLOOR && (!best || score > best.score)) best = { score, mine: mineRow, theirs };
-      }
+  /* SCORING HAPPENS OUTSIDE THE LOCK: it reads consents and principle words
+     and compares them in memory. Only the final re-check and the insert hold
+     the lock the consent switch and answers take, so a pass over hundreds of
+     candidates never stalls a person's own act. */
+  const [me] = await db.execute(sql`
+    SELECT p.account_id AS "accountId", ${BUSY(sql`p.id`)} AS busy
+      FROM profiles p JOIN introduction_consents c ON c.profile_id = p.id AND c.enabled
+     WHERE p.id = ${profileId}::uuid AND p.type = 'human' AND p.account_id IS NOT NULL`) as unknown as Array<{ accountId: string; busy: boolean }>;
+  if (!me) return "not_consenting";
+  if (me.busy) return "busy";
+  const candidates = await db.execute(sql`
+    SELECT p.id FROM profiles p JOIN introduction_consents c ON c.profile_id = p.id AND c.enabled
+     WHERE p.type = 'human' AND p.account_id IS NOT NULL AND p.account_id <> ${me.accountId}::uuid
+       AND p.id <> ${profileId}::uuid
+       AND NOT EXISTS (SELECT 1 FROM introductions i
+                        WHERE (i.profile_a_id = p.id AND i.profile_b_id = ${profileId}::uuid)
+                           OR (i.profile_b_id = p.id AND i.profile_a_id = ${profileId}::uuid))
+       AND NOT ${BUSY(sql`p.id`)}
+     ORDER BY c.updated_at DESC, p.id
+     LIMIT ${options.candidateLimit ?? CANDIDATES_PER_PASS}`) as unknown as Array<{ id: string }>;
+  if (!candidates.length) return "none";
+  const ids = [profileId, ...candidates.map((row) => row.id)];
+  /* Statements only: id, owner and words. Nothing else is selected. */
+  const held = await db.select({ id: principles.id, profileId: principles.profileId, statement: principles.statement })
+    .from(principles)
+    .where(and(inArray(principles.profileId, ids), eq(principles.state, "held"), isNull(principles.unsupportedAt)))
+    .orderBy(asc(principles.rank), asc(principles.id));
+  const own = held.filter((row) => row.profileId === profileId);
+  if (!own.length) return "none";
+  let best: { score: number; mine: (typeof held)[number]; theirs: (typeof held)[number] } | null = null;
+  for (const theirs of held) {
+    if (theirs.profileId === profileId) continue;
+    for (const mineRow of own) {
+      const score = principleOverlap(mineRow.statement, theirs.statement);
+      if (score >= OVERLAP_FLOOR && (!best || score > best.score)) best = { score, mine: mineRow, theirs };
     }
-    if (!best) return settle("none");
-    const aIsMe = profileId < best.theirs.profileId;
-    const [a, b] = aIsMe ? [best.mine, best.theirs] : [best.theirs, best.mine];
-    /* Written only if both people still have introductions on and both
-       principles are still held, checked in the same statement, under the
-       lock the consent switch also takes. */
+  }
+  if (!best) return "none";
+  const aIsMe = profileId < best.theirs.profileId;
+  const [a, b] = aIsMe ? [best.mine, best.theirs] : [best.theirs, best.mine];
+  return db.transaction(async (tx) => {
+    await lockIntroductions(tx);
+    /* Re-checked under the lock, in the insert itself: both people still have
+       introductions on, neither has been handed another open ask meanwhile,
+       and both principles are still held in the words that were scored. */
     const inserted = (await tx.execute(sql`
       INSERT INTO introductions (profile_a_id, profile_b_id, principle_a_id, principle_b_id, principle_a_text, principle_b_text)
       SELECT ${a.profileId}::uuid, ${b.profileId}::uuid, ${a.id}::uuid, ${b.id}::uuid, ${a.statement}, ${b.statement}
        WHERE (SELECT count(*) FROM introduction_consents c WHERE c.enabled AND c.profile_id IN (${a.profileId}::uuid, ${b.profileId}::uuid)) = 2
+         AND NOT ${BUSY(sql`${a.profileId}::uuid`)} AND NOT ${BUSY(sql`${b.profileId}::uuid`)}
          AND (SELECT count(*) FROM principles p WHERE p.state = 'held' AND p.unsupported_at IS NULL
                AND ((p.profile_id = ${a.profileId}::uuid AND p.id = ${a.id}::uuid AND p.statement = ${a.statement})
                  OR (p.profile_id = ${b.profileId}::uuid AND p.id = ${b.id}::uuid AND p.statement = ${b.statement}))) = 2
       ON CONFLICT DO NOTHING
       RETURNING id, created_at AS "createdAt"`)) as unknown as Array<{ id: string; createdAt: Date | string }>;
-    if (!inserted.length) return settle("none");
+    if (!inserted.length) { await options.beforeCommit?.(tx); return "none" as const; }
     /* An unanswered ask lapses for both sides at the same moment; a pass then
        finds them free. */
     const row = inserted[0]!;
     await options.onMatched?.(tx, [a.profileId, b.profileId].map((id) => passAt(id, `asked:${row.id}`, new Date(row.createdAt))));
-    return settle("matched");
+    await options.beforeCommit?.(tx);
+    return "matched" as const;
   });
 }

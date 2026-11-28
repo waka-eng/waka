@@ -18,9 +18,11 @@
  * Only principles are compared, never inspirations, signals or readings.
  * Each side cites its own principle through a composite key on
  * `(profile_id, principle_id)`, so a row can never cite somebody else's
- * principle. Rewording or deleting the principle WITHDRAWS it (migration
- * 0097's triggers): that side's id and words are nulled, so no copy of
- * withdrawn words is kept, and the row is closed. The row itself stays, so
+ * principle. Rewording or deleting the principle, or it ceasing to be held,
+ * WITHDRAWS that side (migration 0097's triggers): its id and words are
+ * nulled, so no copy of withdrawn words is kept, and `withdrawn_x_at` is set.
+ * The OTHER side's view does not change at all: their ask stays answerable
+ * and a yes just waits, until the ordinary lapse. The row itself stays, so
  * the pair is never offered again.
  *
  * TIME IS THE ONLY THING THAT CLOSES A SIDE QUIETLY. An unanswered ask, and
@@ -69,7 +71,10 @@ export const introductions = pgTable("introductions", {
   /** Done on the introduction: it is not shown to that side again. */
   seenAAt: timestamp("seen_a_at", { withTimezone: true }),
   seenBAt: timestamp("seen_b_at", { withTimezone: true }),
-  /** Closed for both: a principle was withdrawn, or an introduction was revoked. */
+  /** That side withdrew its principle: it sees nothing more, and the row can never complete. */
+  withdrawnAAt: timestamp("withdrawn_a_at", { withTimezone: true }),
+  withdrawnBAt: timestamp("withdrawn_b_at", { withTimezone: true }),
+  /** Closed for both: a complete introduction one side turned off before both saw it. */
   closedAt: timestamp("closed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -85,3 +90,15 @@ export const introductions = pgTable("introductions", {
   answerCheck: check("introductions_answer_check",
     sql`(${table.answerA} IS NULL OR ${table.answerA} IN ('yes', 'no')) AND (${table.answerB} IS NULL OR ${table.answerB} IN ('yes', 'no'))`),
 }));
+
+/**
+ * People to look at again: written by migration 0097's principle triggers (a
+ * principle withdrawn, or one becoming held for a consenting person) and
+ * drained by application code into ordinary `match_introductions` jobs
+ * (`drainIntroductionFollowUps` in `lib/queue.ts`), so the queue has one
+ * enqueue path.
+ */
+export const introductionFollowups = pgTable("introduction_followups", {
+  profileId: uuid("profile_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
