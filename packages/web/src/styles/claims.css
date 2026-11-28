@@ -8720,6 +8720,12 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-note-picture--loading .waka-note-picture-open { aspect-ratio: 3 / 4; }
 .waka-note-picture--loading .waka-note-picture-open > img { opacity: 0; }
 .waka-note-picture-failed { margin: var(--sp-12) 0; color: var(--muted); font-size: var(--t-ui); }
+/* Try again is a quiet word by the polish pass's standard (2026-11-27): 44
+   tall, no ground, no underline, full ink beside the muted sentence. */
+.waka-note-picture-failed > button {
+  min-height: var(--waka-corner); padding: 0 var(--sp-4); border: 0; background: none;
+  color: var(--ink); font: inherit; text-decoration: none; cursor: pointer;
+}
 
 /* ON A DESK A TALL SCREENSHOT IS HELD TO THE WINDOW (board, desktop frame:
    "a tall screenshot is held to the window's height so its words show
@@ -8748,7 +8754,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   flex: none; min-height: var(--sp-44); padding: 0 var(--sp-4); border: 0; background: none;
   color: var(--muted); font-size: var(--t-ui); cursor: pointer;
 }
-.waka-note-read .waka-note-read-act:hover { color: var(--ink); }
+.waka-note-read .waka-note-read-act:is(:hover, :focus-visible) { color: var(--ink); }
 
 /* ═══ THE WHOLE PICTURE (founder, 2026-11-27: "Tapped: the whole picture,
    edge to edge, pinch to zoom. The same chevron goes back.") ═══ Over
@@ -8775,7 +8781,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   display: inline-grid; place-items: center; width: var(--waka-corner); height: var(--waka-corner); margin-inline-end: calc(-1 * var(--sp-10));
   padding: 0; border: 0; border-radius: var(--r-pill); background: none; color: var(--muted); cursor: pointer;
 }
-.waka-picture-whole .waka-picture-whole-download:hover { color: var(--ink); }
+.waka-picture-whole .waka-picture-whole-download:is(:hover, :focus-visible) { color: var(--ink); }
 .waka-picture-whole-said { flex: none; margin: var(--sp-8) 0 var(--sp-12); text-align: center; color: var(--muted); font-size: var(--t-ui); }
 .waka-picture-whole-stage > img {
   /* the stage's box, the picture contained in it: a grid cell's auto row
