@@ -135,7 +135,7 @@ import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
 import { bubbleStayMs } from "../lib/kept-bubble";
-import { PrinciplesOverlay, PrinciplesSpark } from "../components/PrinciplesOverlay";
+import { PrinciplesOverlay, PrinciplesAsterisk } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
 import { listInspirationReviews } from "../lib/api";
@@ -9508,13 +9508,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
               founder kept this spark over an asterisk with a name under it
               (2026-11-20: "I like the old star design, I don't want to say
               principles there"). */}
+          {/* ═══ THE SPARK BECOMES WAKA'S ASTERISK, CUT BY THE EDGE (founder,
+              2026-11-27, choosing "C. An asterisk cut by the edge") ═══ Six
+              rounded strokes, part of them off screen, so the mark says "more
+              this way" with light alone. Still no name under it, still always
+              shown, still the same press and the same walk. */}
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              {/* A line about principles makes the star swell and flare. */}
+              {/* A line about principles makes the asterisk flare. */}
               {beckonLit.to === 'star' && beckonLit.n && Date.now() - beckonLit.at < 1700
-                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesSpark /></span>
-                : <PrinciplesSpark />}
+                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesAsterisk edge="right" /></span>
+                : <PrinciplesAsterisk edge="right" />}
             </button>
           ) : null}
           {/* Taps change the invitation on this profile; dragging right

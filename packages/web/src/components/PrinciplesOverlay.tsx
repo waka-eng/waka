@@ -219,10 +219,14 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
       {/* THE STAR CAME BACK (founder, 2026-11-26, after trying the "<":
           "remove < and bring back the star"). Home's star at the right walks
           here; this one at the left walks home. */}
+      {/* THE ASTERISK, CUT BY THE LEFT EDGE (founder, 2026-11-27, choosing
+          "an asterisk cut by the edge"): home's mark, mirrored, showing the
+          part home kept off screen, so this one says "home is this way" the
+          way home's says "Principles". */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <PrinciplesSpark />
+        <PrinciplesAsterisk edge="left" />
       </button>}
       <DialogSurface
         className="waka-over"
@@ -342,12 +346,34 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   );
 }
 
-/** The four-point spark both Principles doors wear: home's at the right
-    walks to Principles, Principles' at the left walks home. */
-export function PrinciplesSpark(): JSX.Element {
+/* ═══ WAKA'S OWN ASTERISK, CUT BY THE EDGE (founder, 2026-11-27, choosing
+   "C. An asterisk cut by the edge" of three) ═══ The four-point spark read as
+   another company's AI button, and a star is a word WAKA retired. The mark
+   is now *, ASCII 42, the wildcard WAKA is named for: six rounded strokes at
+   the weight of the Jost text, 56px tall. Part of it is off screen, so it
+   says "more this way" with light alone. The 24-unit glyph is cropped by its
+   own viewBox, 40 of its 56px showing, so the cut is the svg's edge laid on
+   the screen's edge and nothing overflows the page. Home's shows its left
+   part at the right edge; Principles' shows the same mark mirrored at the
+   left edge, its right part, the part home kept off screen (founder,
+   2026-11-19: "there should be the same star on the left to go back"). */
+const ASTERISK_SHOWN = (24 * 40) / 56;
+const ASTERISK_VIEW = {
+  right: `0 0 ${ASTERISK_SHOWN} 24`,
+  left: `${24 - ASTERISK_SHOWN} 0 ${ASTERISK_SHOWN} 24`,
+} as const;
+
+/** The asterisk both Principles doors wear, cut by the screen edge it sits
+    on: home's at the right walks to Principles, Principles' at the left
+    walks home. */
+export function PrinciplesAsterisk({ edge }: { edge: "left" | "right" }): JSX.Element {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
+    <svg viewBox={ASTERISK_VIEW[edge]} aria-hidden="true" focusable="false" data-edge={edge}>
+      <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+        <path d="M12 3.5v17" />
+        <path d="M4.64 7.75l14.72 8.5" />
+        <path d="M4.64 16.25l14.72-8.5" />
+      </g>
     </svg>
   );
 }
