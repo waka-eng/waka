@@ -8428,13 +8428,12 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 /* The glow is light drawn once, a soft disc on the asterisk's centre; only
    its opacity moves, so the idle glint never repaints. */
+.waka-principles-mark { --waka-mark-glow-x: calc(100% - env(safe-area-inset-right, 0px) - var(--waka-mark-centre)); }
+.waka-principles-spark--home .waka-principles-mark { --waka-mark-glow-x: calc(env(safe-area-inset-left, 0px) + var(--waka-mark-centre)); }
 .waka-principles-mark::before {
   content: ""; position: absolute; inset: 0; opacity: 0; will-change: opacity;
-  background: radial-gradient(circle 22px at calc(100% - env(safe-area-inset-right, 0px) - var(--waka-mark-centre)) 50%, color-mix(in srgb, var(--jar-live) 55%, transparent), transparent);
+  background: radial-gradient(circle 22px at var(--waka-mark-glow-x) 50%, color-mix(in srgb, var(--jar-live) 55%, transparent), transparent);
   animation: waka-spark-glow 3.6s ease-in-out infinite;
-}
-.waka-principles-spark--home .waka-principles-mark::before {
-  background: radial-gradient(circle 22px at calc(env(safe-area-inset-left, 0px) + var(--waka-mark-centre)) 50%, color-mix(in srgb, var(--jar-live) 55%, transparent), transparent);
 }
 /* Always shown, brighter at rest (founder, 2026-11-19: "yes always shown"):
    the mark rests at 0.55 and lights every few seconds on the spark's old
@@ -8459,12 +8458,32 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   45% { opacity: 0.4; }
   65% { opacity: 0.9; }
 }
-/* Under a pointer or the keyboard the mark and its glow hold full light. */
-.waka-principles-spark:is(:hover, :focus-visible) .waka-principles-mark svg,
-.waka-principles-spark:is(:hover, :focus-visible) .waka-principles-mark::before { animation: none; opacity: 1; }
-/* The ring frames the press that holds the ink, drawn inside it so the
-   screen's edge does not cut it. */
-.waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: -2px; }
+/* Under a pointer or the keyboard the mark and its glow hold full light.
+   Hover only where a pointer can hover: a tap on iOS leaves :hover stuck
+   (code review, 2026-11-27). */
+.waka-principles-spark:focus-visible .waka-principles-mark svg,
+.waka-principles-spark:focus-visible .waka-principles-mark::before { animation: none; opacity: 1; }
+@media (hover: hover) {
+  .waka-principles-spark:hover .waka-principles-mark svg,
+  .waka-principles-spark:hover .waka-principles-mark::before { animation: none; opacity: 1; }
+}
+/* The ring frames the ink rather than scoring it (code review,
+   2026-11-27): the ink runs the press's full height, so any ring inside
+   the press crosses it. The ring stands 4px outside the press above,
+   below and on its inner side, and is open on the edge side, where the
+   screen already frames it. */
+.waka-principles-spark:focus-visible { outline: none; }
+.waka-principles-spark:focus-visible::after {
+  content: ""; position: absolute; pointer-events: none;
+  inset: calc(-1 * var(--sp-4)) 0 calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4));
+  border: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent);
+  border-inline-end: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.waka-principles-spark--home:focus-visible::after {
+  inset: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) 0;
+  border-inline-end: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); border-inline-start: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
 @media (prefers-reduced-motion: reduce) {
   .waka-principles-mark svg { animation: none; opacity: 0.6; }
   .waka-principles-mark::before { animation: none; }

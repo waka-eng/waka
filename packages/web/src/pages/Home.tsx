@@ -3361,6 +3361,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const later = window.setTimeout(look, 350);
     return () => { cancelAnimationFrame(frame); window.clearTimeout(later); };
   }, [barBeckon]);
+  /* THE BECKON ENDS ON ITS OWN (code review, 2026-11-27). Whether it shows
+     was only re-checked on a render, so with nothing else rendering the
+     flare's wrapper stayed mounted: the asterisk held full light and never
+     glinted again, and under reduced motion its glow stayed lit. Once the
+     1.7s window closes, a render lets the light return to rest. */
+  useEffect(() => {
+    if (!beckonLit.n || !beckonLit.at) return undefined;
+    const n = beckonLit.n;
+    const timer = window.setTimeout(() => setBeckonLit(b => (b.n === n ? { ...b, at: 0 } : b)), Math.max(0, 1700 - (Date.now() - beckonLit.at)));
+    return () => window.clearTimeout(timer);
+  }, [beckonLit.n, beckonLit.at]);
   const creatureSpeaksRef = useRef(creatureSpeaks);
   creatureSpeaksRef.current = creatureSpeaks;
 
