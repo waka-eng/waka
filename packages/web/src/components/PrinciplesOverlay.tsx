@@ -220,11 +220,11 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           "remove < and bring back the star"). Home's star at the right walks
           here; this one at the left walks home. */}
       {/* THE SAME STAR ON THE LEFT walks home, as home's at the right walks
-          here; its sparkles sit on its outer side. */}
+          here. */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <PrinciplesAsterisk mirrored />
+        <PrinciplesAsterisk />
       </button>}
       <DialogSurface
         className="waka-over"
@@ -345,22 +345,21 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
 }
 
 /* ═══ THE PRINCIPLES STAR (founder, 2026-11-28, choosing "8. Star with
-   sparkles" of eight, after the cut asterisk was "so ugly and cut off" and
-   the fine rays "ugly") ═══ A plump five-point star with round, soft tips,
-   the same body and ivory light as the creature, with two tiny lights
-   beside it as if it just landed. Lit by one light from above. Whole, set
-   in from the edge where the spark sat; Principles wears the same star on
-   its left to walk home (founder, 2026-11-19: "there should be the same
-   star on the left to go back"), its sparkles mirrored to the outer side. */
+   sparkles" of eight, then "i like star without the dots"; the cut
+   asterisk before it was "so ugly and cut off") ═══ A plump five-point star
+   with round, soft tips, the same body and ivory light as the creature.
+   Whole, set in from the edge where the spark sat; Principles wears the
+   same star on its left to walk home (founder, 2026-11-19: "there should be
+   the same star on the left to go back"). */
 const STAR_POINTS = "12.00,5.30 14.35,9.66 19.23,10.55 15.80,14.14 16.47,19.05 12.00,16.90 7.53,19.05 8.20,14.14 4.77,10.55 9.65,9.66";
 
 /** The star both Principles doors wear. The span around it holds the
     glow, a pre-blurred light whose opacity alone animates. */
-export function PrinciplesAsterisk({ mirrored = false }: { mirrored?: boolean }): JSX.Element {
+export function PrinciplesAsterisk(): JSX.Element {
   const fill = `waka-star-${useId().replace(/:/g, "")}`;
   return (
     <span className="waka-principles-mark">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={mirrored ? { transform: "scaleX(-1)" } : undefined}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <defs>
           <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="10.6" r="9">
             <stop offset="0" stopColor="#fffdf8" />
@@ -368,11 +367,9 @@ export function PrinciplesAsterisk({ mirrored = false }: { mirrored?: boolean })
             <stop offset="1" stopColor="#c9bfad" />
           </radialGradient>
         </defs>
-        <g transform="scale(0.86)" style={{ transformOrigin: "12px 12px" }}>
+        <g>
           <polygon points={STAR_POINTS} fill={`url(#${fill})`} stroke={`url(#${fill})`} strokeWidth="4.4" strokeLinejoin="round" />
         </g>
-        <circle cx="20.2" cy="3.8" r="1.3" fill="#fffdf8" />
-        <circle cx="22.2" cy="7.6" r="0.7" fill="#f6eedf" opacity="0.75" />
       </svg>
     </span>
   );
