@@ -23,7 +23,7 @@ vi.mock('../src/lib/api/inspiration-relevance',async original=>({...await origin
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),prepareConversationOpening:vi.fn(),listConversations:vi.fn(async(profile:string)=>({profileId:profile,conversations:[],generationEnabled:true}))}));
 vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom({inspirations:[]})}));
 vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'account',email:'owner@example.test'},profile:{id:VIEWER_ID,name:'Owner',type:'human'},profiles:[]})}));
-const original:InspirationRelevance={id:'66666666-6666-4666-8666-666666666666',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null};
+const original:InspirationRelevance={id:'66666666-6666-4666-8666-666666666666',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null,photoId:null,labelIsPhoto:false};
 let world:MountedWorld;
 beforeAll(()=>{installCanvasStub();setViewport(390,844);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
 beforeEach(()=>{

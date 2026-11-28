@@ -7745,6 +7745,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
      inspirations"). Closing the sheet ends the look, however it reopens. */
   useEffect(() => { if (!savesOpen) { setSavesAsSheet(false); setSavesFocus(null); } }, [savesOpen]);
   const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); feel('light'); }, [openOverHome]);
+  /* The bar's count always opens every save, whatever look was left set. */
+  const openAllSaves = useCallback(() => { setSavesFocus(null); openSheet(); }, [openSheet]);
 
   /* ONCE A WEEK, FROM SUNDAY (local time). The week is named by its Sunday;
      the offer is remembered per profile, so it is made once, and only when
@@ -11841,9 +11843,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
              inspirations caret clickable if at least 1 exists. dont show it
              if 0"), and none while the count is still unknown, so it never
              flashes in and out. */
-          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openSheet }
+          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openAllSaves }
             : !inspirations || inspirations.length + fieldBeyond === 0 ? undefined : {
-              onOpen: openSheet,
+              onOpen: openAllSaves,
               /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
                  the field keeps true through every keep and removal
                  (`fieldBeyond`); unknown until the field's first page. */

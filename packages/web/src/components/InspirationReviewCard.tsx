@@ -47,7 +47,7 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
   const quoted=item.text||item.attachmentLabel||say('worldSavedWord');
   const words=photo?item.text:quoted;
   const label=item.attachmentLabel&&(photo?!item.labelIsPhoto:!!item.text)?item.attachmentLabel:null;
-  const spoken=photo&&!item.text?<span className="sr-only">{item.attachmentLabel||say('worldSavedWord')}</span>:null;
+  const spoken=photo&&!item.text&&!label?<span className="sr-only">{item.attachmentLabel||say('worldSavedWord')}</span>:null;
   const when=dateStamp(new Date(item.createdAt).getTime(),locale);
   async function answer(choice:RelevanceChoice){
     if(saving.current||changed)return false;

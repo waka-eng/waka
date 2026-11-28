@@ -5,9 +5,9 @@ export interface InspirationRelevance {
   sourceRevision: string; reviewVersion: number;
   memoryExcludedAt: string | null; reviewAfter: string | null; attachmentLabel: string | null;
   /** The save's first picture, read through the owner-checked thumbnail store. */
-  photoId?: string | null;
+  photoId: string | null;
   /** attachmentLabel is that picture's file name, not a link's title. */
-  labelIsPhoto?: boolean;
+  labelIsPhoto: boolean;
 }
 export type RelevanceChoice = 'relevant' | 'not_relevant' | 'later';
 export async function listInspirationReviews(profile: string): Promise<InspirationRelevance[]> {
