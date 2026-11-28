@@ -5772,10 +5772,15 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--ink); text-decoration: none; padding-inline: 0; margin: 0;
 }
 .waka-account .waka-settings-leave .waka-settings-row.waka-settings-delete { color: var(--muted); }
-.waka-settings-export { display: flex; flex-direction: column; gap: var(--sp-4); }
+.waka-settings-export, .waka-settings-introductions { display: flex; flex-direction: column; gap: var(--sp-4); }
 /* A hint or a failure under the row sits inside the panel's own padding. */
-.waka-account .waka-settings-export > p { margin: 0; padding: 0 var(--sp-14) var(--sp-12); }
+.waka-account :is(.waka-settings-export, .waka-settings-introductions) > p { margin: 0; padding: 0 var(--sp-14) var(--sp-12); }
 .waka-settings-export > a.waka-settings-row { color: var(--ink); text-decoration: none; }
+/* What introductions compare, said under the switch at the size the other
+   Settings hints use, tucked up to the row it explains. */
+.waka-settings-introductions { gap: 0; }
+.waka-account .waka-settings-introductions > .waka-settings-note { font-size: var(--t-ui); line-height: 1.45; color: var(--muted); }
+.waka-settings-introductions > .waka-settings-row { padding-bottom: var(--sp-6); }
 /* THE FOOT'S TWO ACTS AND THE LEGAL LINKS ON THE SAME EDGE. Their own
    inline padding put Sign out's words 8px and Delete account's 14px in from
    every other word on the card; the 44px height stays. */
@@ -8790,5 +8795,84 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
      let a tall screenshot overflow the screen's foot */
   position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain;
   transform-origin: center; will-change: transform; image-orientation: from-image; -webkit-user-drag: none;
+}
+/* ═══ INTRODUCTIONS ON HOME (design "Agent introductions", approved
+   2026-11-27) ═══
+   The ask, the introduction and the no all speak in the bubble's own voice
+   (`.jar-char-bubble`), in the reading's place. What is new here is the
+   light: their light waits at the edge on your creature's line, leaves off
+   the edge on a no, and on an introduction their creature stands beside
+   yours joined by a warm to cool light. Everything sits on the line the
+   world publishes (`--jar-char-mid`, `--jar-char`), so nothing guesses
+   where your creature is.
+
+   NO BREAKPOINT. The guest's place is clamped to the window instead
+   (`min(…, 100% - its half width - 16px)`), so on a 360px phone it stands a
+   little closer rather than past the edge. MEASURED (Playwright, local
+   stack, 2026-11-27): the guest's canvas spans 267 to 365px at 390 × 844 and
+   237 to 335px at 360 × 640, inside the 16px gutter (374 and 344) at both;
+   at 360 the clamp is what holds it there. */
+/* A visiting creature's light: the world's own cool note (`--jar-dust`, the
+   tone `coolRamp` turns a guest's body toward), so the guest reads as
+   someone else beside your warm one. The bridge runs --moon-warm to this. */
+.waka-intro-edge, .waka-intro-scene { --waka-intro-cool: var(--jar-dust); }
+/* The ask is a longer line than most; balanced, as the hunch's is. */
+.waka-intro-bubble .jar-char-bubble-reading { text-wrap: balance; }
+.waka-intro-fine {
+  display: block;
+  margin-top: var(--sp-6);
+  font-size: var(--bubble-label);
+  line-height: var(--bubble-lh);
+  color: color-mix(in srgb, var(--waka-on-light) 58%, transparent);
+  text-wrap: balance;
+}
+.waka-intro-eyebrow { text-transform: uppercase; letter-spacing: 0.14em; }
+
+.waka-intro-edge {
+  position: absolute; z-index: 1; right: 0;
+  top: var(--jar-char-mid, 50%);
+  width: calc(var(--intro-size, 110px) * 1.2);
+  height: calc(var(--intro-size, 110px) * 2.2);
+  transform: translate(50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--waka-intro-cool) 30%, transparent), transparent);
+  pointer-events: none;
+  animation: waka-intro-wait 1.4s ease-out both;
+  transition: transform 1.6s ease-in, opacity 1.6s ease-in;
+}
+.waka-intro-edge--leaving { transform: translate(120%, -50%); opacity: 0; }
+@keyframes waka-intro-wait { from { opacity: 0; } to { opacity: 1; } }
+
+.waka-intro-scene {
+  --intro-guest-x: min(calc(50% + var(--intro-reach)), calc(100% - var(--intro-guest) * 0.62 - var(--sp-16)));
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+}
+.waka-intro-guest {
+  position: absolute; top: var(--jar-char-mid, 50%); left: var(--intro-guest-x);
+  transform: translate(-50%, -50%);
+  animation: waka-intro-arrive 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes waka-intro-arrive {
+  from { opacity: 0; translate: calc(var(--intro-guest) * 0.5) 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+/* The light between them: warm at yours, cool at theirs. Soft edged, as
+   light is, and it comes on after the guest has arrived. */
+.waka-intro-bridge {
+  position: absolute; top: var(--jar-char-mid, 50%);
+  left: calc(50% + var(--intro-size) * 0.32);
+  width: calc(var(--intro-guest-x) - 50% - var(--intro-size) * 0.32 - var(--intro-guest) * 0.32);
+  height: calc(var(--intro-size) * 0.14);
+  transform: translateY(-10%);
+  border-radius: calc(var(--intro-size) * 0.07);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--moon-warm) 72%, transparent), color-mix(in srgb, var(--waka-intro-cool) 72%, transparent));
+  filter: blur(6px);
+  opacity: 0.85;
+  animation: waka-intro-wait 1.2s ease-out 0.7s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .waka-intro-edge, .waka-intro-guest, .waka-intro-bridge { animation: none; }
+  .waka-intro-edge { transition: opacity 0.6s linear; }
+  .waka-intro-edge--leaving { transform: translate(50%, -50%); }
 }
 }

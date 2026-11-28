@@ -186,6 +186,7 @@ import {
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
 import { hasLiveReading, writeHunchForProfile } from './hunches.js';
+import { introductionsAvailable, matchIntroductionsForProfile, type FollowUp } from './introductions.js';
 import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
@@ -376,7 +377,8 @@ async function enqueueKeyedJob(input: {
     | "generate_review_question"
     | "generate_conversation_reply"
     | "derive_review_answer"
-    | "generate_hunch";
+    | "generate_hunch"
+    | "match_introductions";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -389,17 +391,21 @@ async function enqueueKeyedJob(input: {
     | GenerateReviewQuestionPayload
     | {conversationId:string;replyRequestId:string}
     | {answerId:string;sessionId:string;signalIds?:string[]}
-    | GenerateHunchPayload;
+    | GenerateHunchPayload
+    | { reason: string };
   idempotencyKey: string;
+  /** Not before this moment (default now). Used for an introduction's quiet lapse. */
+  runAfter?: Date;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
-    INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
+    INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key, run_after)
     VALUES (
       ${input.profileId}::uuid,
       ${input.type}::background_job_type,
       ${JSON.stringify(input.payload)}::jsonb,
       ${DEFAULT_MAX_ATTEMPTS},
-      ${input.idempotencyKey}
+      ${input.idempotencyKey},
+      coalesce(${input.runAfter?.toISOString() ?? null}::timestamptz, now())
     )
     ON CONFLICT (idempotency_key)
     WHERE idempotency_key IS NOT NULL
@@ -414,7 +420,7 @@ async function enqueueKeyedJob(input: {
         ELSE background_jobs.payload
       END,
       attempts = CASE WHEN ${TERMINAL_JOB_STATUS} THEN 0 ELSE background_jobs.attempts END,
-      run_after = CASE WHEN ${TERMINAL_JOB_STATUS} THEN now() ELSE background_jobs.run_after END,
+      run_after = CASE WHEN ${TERMINAL_JOB_STATUS} THEN EXCLUDED.run_after ELSE background_jobs.run_after END,
       locked_at = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.locked_at END,
       last_error = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.last_error END,
       rerun_requested = CASE
@@ -697,6 +703,47 @@ export async function enqueueHunchAfterCorrection(profileId: string, hunchId: st
     idempotencyKey: `generate_hunch:${profileId}:after:${hunchId}` }, transaction);
 }
 
+/** A match pass for a person who is free now, or will be at `runAfter` (an
+ * ask or a waiting yes lapsing quietly). Only where `WAKA_INTRODUCTIONS=1`;
+ * otherwise nothing is enqueued. Keyed per person and reason, so a burst
+ * asks once and a delayed lapse is never absorbed by an immediate pass. */
+export async function enqueueIntroductionMatch(followUp: FollowUp,
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult | null> {
+  if (!introductionsAvailable()) return null;
+  const { profileId, key, runAfter } = followUp;
+  return enqueueKeyedJob({ profileId, type: "match_introductions", payload: { reason: key },
+    idempotencyKey: `match_introductions:${profileId}:${key}`, ...(runAfter ? { runAfter } : {}) }, transaction);
+}
+
+/**
+ * Turn the marks migration 0097's principle triggers leave (a principle
+ * withdrawn, or one becoming held for a consenting person) into ordinary
+ * match passes, through the one enqueue path. Bounded and skip-locked, so
+ * two drains never take the same mark. The marks are taken and the jobs
+ * written in ONE transaction, so a failure leaves every mark in place for the
+ * next drain. Called by the worker once per drain and once after principle
+ * work; a cheap EXISTS outside any transaction makes the common case (no
+ * marks) one indexed read.
+ */
+export async function drainIntroductionFollowUps(db: ReturnType<typeof getDb> = getDb()): Promise<number> {
+  if (!introductionsAvailable()) return 0;
+  const [marked] = (await db.execute(sql`SELECT EXISTS (SELECT 1 FROM introduction_followups) AS "any"`)) as unknown as Array<{ any: boolean }>;
+  if (!marked?.any) return 0;
+  return db.transaction(async (tx) => {
+    const rows = (await tx.execute(sql`
+      DELETE FROM introduction_followups WHERE profile_id IN (
+        SELECT profile_id FROM introduction_followups ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED)
+      RETURNING profile_id AS "profileId"`)) as unknown as Array<{ profileId: string }>;
+    for (const row of rows) await enqueueIntroductionMatch({ profileId: row.profileId, key: "followup" }, tx);
+    return rows.length;
+  });
+}
+/** The drain as the worker calls it: a failure is logged, and the marks stay. */
+const drainIntroductionFollowUpsLogged = () => drainIntroductionFollowUps().catch((error: unknown) => {
+  console.error("[introductions] follow-up drain failed; marks kept for the next drain", safeErrorDiagnostic(error));
+  return 0;
+});
+
 /** The question asked right after a save, before any answer exists: its
  * `afterReflectionId` (founder, 2026-11-26: the creature should "very
  * clearly react to the content i saved, not generically"). */
@@ -904,6 +951,11 @@ export async function drainBackgroundJobs(
     failed: 0,
     deferred: 0,
   };
+
+  /* Introductions' marks become jobs here, so every principle path (routes,
+     reconciles, generation) reaches the queue without each remembering to.
+     A real drain only; flag off, it reads nothing. */
+  if (!options.store) await drainIntroductionFollowUpsLogged();
 
   let deferrals = 0;
   let processed = 0;
@@ -1203,6 +1255,16 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true) });
       return;
     }
+    case "match_introductions": {
+      /* No model call: principle statements compared by word overlap. The
+         flag is read again here, so a job queued before it was turned off
+         does nothing. */
+      await matchIntroductionsForProfile(getDb(), job.profileId, {
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+        onMatched: async (tx, followUps) => { for (const followUp of followUps) await enqueueIntroductionMatch(followUp, tx); },
+      });
+      return;
+    }
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
@@ -1253,6 +1315,11 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
         expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
         beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
+      /* Introductions: a principle that became held (or was withdrawn) here
+         marked its consenting owner (migration 0097's trigger); turn marks
+         into match passes now rather than at the next drain. Flag-gated, no
+         model call, and it never fails the principle work it follows. */
+      await drainIntroductionFollowUpsLogged();
       return;
     }
     case "enrich_attachment": {

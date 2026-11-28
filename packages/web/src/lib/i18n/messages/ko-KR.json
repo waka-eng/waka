@@ -856,5 +856,21 @@
   "worldImportNoneCameIn": "하나도 가져오지 못했어요.",
   "worldImportFewLeftOut": "몇 개는 가져오지 못했어요.",
   "worldImportTryPhotoButton": "사진 버튼으로 다시 추가할 수 있어요.",
-  "worldImportTryLater": "나중에 다시 해 보세요."
+  "worldImportTryLater": "나중에 다시 해 보세요.",
+  "introAskConsent": "내 원칙 중 하나를 같이 가진 사람이 있으면 소개받을래요?",
+  "introAskMatch": "내 원칙 중 하나를 같이 가진 사람이 있어요. 소개받을래요?",
+  "introAskFine": "원칙만 비교해요. 그 밖에 나에 대한 건 공유되지 않아요.",
+  "introYes": "소개해 줘요",
+  "introNotNow": "다음에",
+  "introOn": "소개를 켰어요. 설정에서 언제든 끌 수 있어요.",
+  "introWaiting": "알겠어요. 상대도 좋다고 하면 여기에 보여요.",
+  "introBothHold": "둘 다 가진 원칙",
+  "introSomeone": "누군가",
+  "introDeclined": "알겠어요. 아무것도 공유되지 않았고, 상대는 물어본 줄도 몰라요.",
+  "introTurnOff": "소개 끄기",
+  "introTurnOn": "소개 켜기",
+  "introOff": "소개를 껐어요.",
+  "introDone": "완료",
+  "introSettingsFine": "원칙만 비교해요. 그 밖에 나에 대한 건 공유되지 않아요.",
+  "introChangeFailed": "소개 설정을 바꾸지 못했어요. 다시 시도해 주세요."
 }

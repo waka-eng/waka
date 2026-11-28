@@ -271,6 +271,11 @@ describe("nothing visible loses its press", () => {
                2026-11), revived in `MUST_TAKE_A_PRESS` above; the aura
                around it still takes none. */
             ".waka-companion",
+            /* Introductions on home: their light at the edge, and the guest
+               with the light between you. Nothing in either takes a press;
+               the acts are in the bubble. */
+            ".waka-intro-edge",
+            ".waka-intro-scene",
             /* THE TAG ON A CLAIM SLIP (2026-10-15): one word, `aria-hidden`,
                on the slip's edge while it is dragged or leaving. The press
                under it is the drag itself; the named buttons under the slip

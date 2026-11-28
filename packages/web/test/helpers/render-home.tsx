@@ -150,7 +150,8 @@ export function dataMockFrom(facts: WorldFacts) {
  *   member as its contributors, which was also the smallest wall that
  *   satisfied the serve gate's two-voices rule.
  *
- * Three verbs remain and all three answer with nothing, which is what the
+ * Three verbs remain and all three answer with nothing (and introductions
+ * answer "not offered"), which is what the
  * world needs them to do: a mounted world asks for them on boot and a
  * fixture that left them undefined would fail on a missing function rather
  * than on anything a test is about.
@@ -161,6 +162,8 @@ export function apiMockFrom(_facts: WorldFacts) {
     fetchProfiles: none,
     listInspirationReviews: none,
     fetchTopOfMindVersions: none,
+    /* Introductions are not offered in a fixture world unless a test says so. */
+    fetchIntroductions: async () => ({ available: false, consent: { enabled: false, answered: false }, offerConsent: false, introduction: null }),
   };
 }
 

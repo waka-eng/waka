@@ -62,6 +62,7 @@ import { topOfMindRoutes } from "./routes/top-of-mind.js";
 import { createMcpReadRoutes } from "./routes/mcp-reads.js";
 import { recordMcpReads } from "./lib/mcp-reads.js";
 import { hunchRoutes } from "./routes/hunches.js";
+import { introductionRoutes } from "./routes/introductions.js";
 
 export const app = new Hono();
 app.onError((error, c) => {
@@ -162,6 +163,8 @@ app.route("/api/inspiration-days", createInspirationDaysRoutes());
 // Layer 3 — the one live artifact per profile, and its version chain.
 app.route("/api/top-of-mind", topOfMindRoutes);
 app.route("/api/hunch", hunchRoutes);
+// Introductions between two consenting people: principles only, never saves.
+app.route("/api/introductions", introductionRoutes);
 
 // Reader verdicts that teach the next regeneration.
 app.route("/api/feedback", feedbackRoutes);

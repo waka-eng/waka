@@ -95,6 +95,9 @@ function verbsOffered(): string[] {
 const REGISTER: Record<string, string> = {
   prepareConversationOpening: "RULED: a read-only POST resolves current owned source proofs without persisting anything; close discards its projection. First Send commits the descriptor with the conversation, whose deleteConversation exit erases it.",
   createProfileKey: "revokeProfileKey",
+  setIntroductionConsent: "RULED: the switch is its own way back; Introduce us and Turn on are undone by Turn off introductions (in the bubble after a no, and in Settings), and turning off withdraws every open match silently",
+  answerIntroduction: "RULED: an answer to one match is final and private; Not now is never shown to the other side, and Introduce us completes only if they also say yes. Turn off introductions withdraws any yes still open",
+  markIntroductionSeen: "RULED: Done only stops showing an introduction both people already agreed to; nothing is deleted or shared by it",
   answerHunch: "RULED: answers the creature's guess from the first saves; Yes is the same 'true' a person files on a signal (retracted on the signal's own card), and Not quite writes the person's words, which the next hunch honours and the next reading replaces",
   askSaveQuestion: "RULED: asks the creature's question about a fresh save; idempotent and read-only for the person, it writes only a generated question onto its own job, which the next answer or edit supersedes",
   revokeProfileKey: "RULED: revocation is permanent; create a new key for the same profile to reconnect",
