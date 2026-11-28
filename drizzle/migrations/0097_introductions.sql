@@ -10,10 +10,10 @@ CREATE TABLE "introductions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"profile_a_id" uuid NOT NULL,
 	"profile_b_id" uuid NOT NULL,
-	"principle_a_id" uuid NOT NULL,
-	"principle_b_id" uuid NOT NULL,
-	"principle_a_text" text NOT NULL,
-	"principle_b_text" text NOT NULL,
+	"principle_a_id" uuid,
+	"principle_b_id" uuid,
+	"principle_a_text" text,
+	"principle_b_text" text,
 	"status" text DEFAULT 'offered' NOT NULL,
 	"answer_a" text,
 	"answer_b" text,
@@ -21,6 +21,7 @@ CREATE TABLE "introductions" (
 	"answered_b_at" timestamp with time zone,
 	"seen_a_at" timestamp with time zone,
 	"seen_b_at" timestamp with time zone,
+	"closed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "introductions_ordered_pair_check" CHECK ("introductions"."profile_a_id" < "introductions"."profile_b_id"),
@@ -31,8 +32,8 @@ CREATE TABLE "introductions" (
 ALTER TABLE "introduction_consents" ADD CONSTRAINT "introduction_consents_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_a_id_profiles_id_fk" FOREIGN KEY ("profile_a_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_b_id_profiles_id_fk" FOREIGN KEY ("profile_b_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_a_fk" FOREIGN KEY ("profile_a_id","principle_a_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_b_fk" FOREIGN KEY ("profile_b_id","principle_b_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_a_fk" FOREIGN KEY ("profile_a_id","principle_a_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_b_fk" FOREIGN KEY ("profile_b_id","principle_b_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "introductions_pair_unique_idx" ON "introductions" USING btree ("profile_a_id","profile_b_id");--> statement-breakpoint
 CREATE INDEX "introductions_profile_b_idx" ON "introductions" USING btree ("profile_b_id");--> statement-breakpoint
 -- Introductions are between people. An agent or a room's mind can neither
@@ -53,17 +54,28 @@ CREATE TRIGGER "introduction_consents_humans_only" BEFORE INSERT OR UPDATE OF "p
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
 CREATE TRIGGER "introductions_humans_only" BEFORE INSERT OR UPDATE OF "profile_a_id", "profile_b_id" ON "introductions"
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
--- An introduction rests on the words each person held when it was offered.
--- Rewording a principle withdraws it, as deleting one does (the composite
--- foreign keys cascade), so no copy of withdrawn words outlives them.
-CREATE OR REPLACE FUNCTION "forget_introductions_citing_principle"() RETURNS trigger LANGUAGE plpgsql AS $$
+-- WITHDRAWING A PRINCIPLE (rewording or deleting it) withdraws it from every
+-- introduction that cites it: that side's id and words are nulled, so no copy
+-- of withdrawn words is kept, and the row is closed for both. The row stays,
+-- so the pair is never offered again. Runs BEFORE the delete so the
+-- composite foreign key (no action) never sees a dangling citation.
+CREATE OR REPLACE FUNCTION "withdraw_principle_from_introductions"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  DELETE FROM "introductions"
+  UPDATE "introductions" SET
+    "principle_a_id" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_id" END,
+    "principle_a_text" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_text" END,
+    "principle_b_id" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_id" END,
+    "principle_b_text" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_text" END,
+    "closed_at" = coalesce("closed_at", now()),
+    "updated_at" = now()
    WHERE ("profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id")
       OR ("profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id");
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
-CREATE TRIGGER "principles_forget_introductions_on_reword" AFTER UPDATE OF "statement" ON "principles"
+CREATE TRIGGER "principles_withdraw_from_introductions_on_delete" BEFORE DELETE ON "principles"
+  FOR EACH ROW EXECUTE FUNCTION "withdraw_principle_from_introductions"();--> statement-breakpoint
+CREATE TRIGGER "principles_withdraw_from_introductions_on_reword" AFTER UPDATE OF "statement" ON "principles"
   FOR EACH ROW WHEN (OLD."statement" IS DISTINCT FROM NEW."statement")
-  EXECUTE FUNCTION "forget_introductions_citing_principle"();
+  EXECUTE FUNCTION "withdraw_principle_from_introductions"();

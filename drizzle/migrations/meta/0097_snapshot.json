@@ -1,5 +1,5 @@
 {
-  "id": "0fea42eb-5092-4633-8e96-0cdffcc87fdc",
+  "id": "39bd788d-585a-4903-ac5b-fb9b18afa5c3",
   "prevId": "f76e35f5-a403-48d9-a718-52dc4510a0ba",
   "version": "7",
   "dialect": "postgresql",
@@ -9977,25 +9977,25 @@
           "name": "principle_a_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "principle_b_id": {
           "name": "principle_b_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "principle_a_text": {
           "name": "principle_a_text",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "principle_b_text": {
           "name": "principle_b_text",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -10036,6 +10036,12 @@
         },
         "seen_b_at": {
           "name": "seen_b_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -10132,7 +10138,7 @@
             "profile_id",
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "introductions_principle_b_fk": {
@@ -10147,7 +10153,7 @@
             "profile_id",
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },

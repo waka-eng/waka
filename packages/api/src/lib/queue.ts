@@ -151,6 +151,7 @@ import {
   signalEvidence,
   attachments,
   reviewSessions,
+  introductionConsents,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { databaseSqlState, safeErrorDiagnostic } from './error-diagnostics.js';
@@ -186,7 +187,7 @@ import {
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
 import { hasLiveReading, writeHunchForProfile } from './hunches.js';
-import { introductionsAvailable, matchIntroductionsForProfile } from './introductions.js';
+import { holdsAPrinciple, introductionsAvailable, matchIntroductionsForProfile, type FollowUp } from './introductions.js';
 import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
@@ -392,17 +393,20 @@ async function enqueueKeyedJob(input: {
     | {conversationId:string;replyRequestId:string}
     | {answerId:string;sessionId:string;signalIds?:string[]}
     | GenerateHunchPayload
-    | { reason: "consent" };
+    | { reason: string };
   idempotencyKey: string;
+  /** Not before this moment (default now). Used for an introduction's quiet lapse. */
+  runAfter?: Date;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
-    INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
+    INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key, run_after)
     VALUES (
       ${input.profileId}::uuid,
       ${input.type}::background_job_type,
       ${JSON.stringify(input.payload)}::jsonb,
       ${DEFAULT_MAX_ATTEMPTS},
-      ${input.idempotencyKey}
+      ${input.idempotencyKey},
+      coalesce(${input.runAfter?.toISOString() ?? null}::timestamptz, now())
     )
     ON CONFLICT (idempotency_key)
     WHERE idempotency_key IS NOT NULL
@@ -417,7 +421,7 @@ async function enqueueKeyedJob(input: {
         ELSE background_jobs.payload
       END,
       attempts = CASE WHEN ${TERMINAL_JOB_STATUS} THEN 0 ELSE background_jobs.attempts END,
-      run_after = CASE WHEN ${TERMINAL_JOB_STATUS} THEN now() ELSE background_jobs.run_after END,
+      run_after = CASE WHEN ${TERMINAL_JOB_STATUS} THEN EXCLUDED.run_after ELSE background_jobs.run_after END,
       locked_at = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.locked_at END,
       last_error = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.last_error END,
       rerun_requested = CASE
@@ -700,14 +704,25 @@ export async function enqueueHunchAfterCorrection(profileId: string, hunchId: st
     idempotencyKey: `generate_hunch:${profileId}:after:${hunchId}` }, transaction);
 }
 
-/** Look for an introduction for a person who just said Introduce us. Only
- * where `WAKA_INTRODUCTIONS=1`; otherwise nothing is enqueued. Keyed per
- * profile, so a burst of switches asks once. */
-export async function enqueueIntroductionMatch(profileId: string,
+/** A match pass for a person who is free now, or will be at `runAfter` (an
+ * ask or a waiting yes lapsing quietly). Only where `WAKA_INTRODUCTIONS=1`;
+ * otherwise nothing is enqueued. Keyed per person and reason, so a burst
+ * asks once and a delayed lapse is never absorbed by an immediate pass. */
+export async function enqueueIntroductionMatch(followUp: FollowUp | string,
   transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult | null> {
   if (!introductionsAvailable()) return null;
-  return enqueueKeyedJob({ profileId, type: "match_introductions", payload: { reason: "consent" },
-    idempotencyKey: `match_introductions:${profileId}` }, transaction);
+  const { profileId, key, runAfter } = typeof followUp === "string" ? { profileId: followUp, key: "now", runAfter: undefined } : followUp;
+  return enqueueKeyedJob({ profileId, type: "match_introductions", payload: { reason: key },
+    idempotencyKey: `match_introductions:${profileId}:${key}`, ...(runAfter ? { runAfter } : {}) }, transaction);
+}
+
+/** A newly held principle is a reason to look again, for a consenting person. */
+async function enqueueIntroductionMatchIfConsenting(profileId: string): Promise<void> {
+  if (!introductionsAvailable()) return;
+  const db = getDb();
+  const [consent] = await db.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
+    .where(eq(introductionConsents.profileId, profileId)).limit(1);
+  if (consent?.enabled && await holdsAPrinciple(db, profileId)) await enqueueIntroductionMatch({ profileId, key: "principles" });
 }
 
 /** The question asked right after a save, before any answer exists: its
@@ -1220,7 +1235,10 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       /* No model call: principle statements compared by word overlap. The
          flag is read again here, so a job queued before it was turned off
          does nothing. */
-      await matchIntroductionsForProfile(getDb(), job.profileId);
+      await matchIntroductionsForProfile(getDb(), job.profileId, {
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+        onMatched: async (tx, followUps) => { for (const followUp of followUps) await enqueueIntroductionMatch(followUp, tx); },
+      });
       return;
     }
     case "generate_reflection_question": {
@@ -1273,6 +1291,10 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
         expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
         beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
+      /* Principles may have become held: a consenting person is looked at
+         again (introductions, flag-gated, no model call). Never fails the
+         principle work it follows. */
+      await enqueueIntroductionMatchIfConsenting(profileId).catch(() => undefined);
       return;
     }
     case "enrich_attachment": {

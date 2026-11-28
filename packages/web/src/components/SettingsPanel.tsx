@@ -8,6 +8,7 @@ import { checkedNativeApiOrigin } from "../lib/platform/api-origin";
 import { fetchProfiles, type ApiOwnedProfile } from "../lib/api/profiles";
 import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessions";
 import { fetchIntroductions, setIntroductionConsent } from "../lib/api/introductions";
+import { INTRODUCTIONS_CHANGED } from "../lib/introductions";
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
@@ -394,7 +395,11 @@ function IntroductionsControl({ locale }: { locale: SupportedLocale }): JSX.Elem
   const flip = () => {
     const enabled = !state.enabled;
     setBusy(true); setFailed(false);
-    void setIntroductionConsent(enabled).then(() => setState({ ...state, enabled }))
+    /* Home hears it too, so its bubble never speaks for the old switch. */
+    void setIntroductionConsent(enabled).then(() => {
+      setState({ ...state, enabled });
+      window.dispatchEvent(new CustomEvent(INTRODUCTIONS_CHANGED, { detail: { enabled } }));
+    })
       .catch(() => setFailed(true)).finally(() => setBusy(false));
   };
   return (

@@ -2,7 +2,7 @@
  * principle statements, no model call. Pure, so no database. */
 import { describe, expect, it } from "vitest";
 
-import { OVERLAP_FLOOR, firstName, introductionsAvailable, principleOverlap, principleWords } from "./introductions.js";
+import { OVERLAP_FLOOR, firstName, introductionsAvailable, negated, principleOverlap, principleWords, stem } from "./introductions.js";
 
 describe("principle overlap", () => {
   it("finds one principle said two ways", () => {
@@ -19,6 +19,34 @@ describe("principle overlap", () => {
   it("reads Korean in two-letter pieces, so particles do not hide a shared word", () => {
     expect([...principleWords("작은 일을 끝내는 편")]).toContain("작은");
     expect(principleOverlap("큰 계획보다 작은 일을 끝내는 쪽을 고른다", "작은 일을 끝내는 것이 큰 계획보다 낫다")).toBeGreaterThanOrEqual(OVERLAP_FLOOR);
+  });
+});
+
+describe("negation and word forms", () => {
+  it("keeps negations, and never pairs a principle with its negation", () => {
+    expect(negated("Don't plan big things.")).toBe(true);
+    expect(negated("Don’t plan big things.")).toBe(true);
+    expect(negated("Never plan big things.")).toBe(true);
+    expect(negated("I won't wait for permission.")).toBe(true);
+    expect(negated("큰 계획은 세우지 않는다")).toBe(true);
+    expect(negated("Plan big things.")).toBe(false);
+    expect(principleOverlap("Plan the big launch carefully before you build.", "Don't plan the big launch carefully before you build.")).toBe(0);
+    expect(principleOverlap("Never skip the hard conversation with a friend.", "Don't skip the hard conversation with a friend."))
+      .toBeGreaterThanOrEqual(OVERLAP_FLOOR);
+  });
+
+  it("reads an apostrophe as part of the word", () => {
+    expect([...principleWords("Don't hide the work.")]).not.toContain("don");
+  });
+
+  it("lands plural, -ing, -ed and a silent e on one stem", () => {
+    expect(stem("values")).toBe(stem("value"));
+    expect(stem("creates")).toBe(stem("create"));
+    expect(stem("creating")).toBe(stem("create"));
+    expect(stem("planning")).toBe(stem("plan"));
+    expect(stem("finished")).toBe(stem("finish"));
+    expect(stem("wishes")).toBe(stem("wish"));
+    expect(principleOverlap("Create value for the people you serve.", "Creating values that serve people matters.")).toBeGreaterThanOrEqual(OVERLAP_FLOOR);
   });
 });
 

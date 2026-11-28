@@ -20,6 +20,7 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { answerIntroduction, fetchIntroductions, markIntroductionSeen, setIntroductionConsent, type ApiIntroductionState } from '../src/lib/api';
+import { INTRODUCTIONS_CHANGED } from '../src/lib/introductions';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [
   { id: 'river', text: 'Walked home the long way to hear the river.', daysAgo: 1 },
@@ -65,6 +66,7 @@ it('asks first, says what is compared under the question, and Introduce us turns
   expect(bubble()).toContain('Want an introduction when someone else holds one of your principles?');
   expect(bubble()).toContain('Only principles are compared, never your saves.');
   expect(world.container.querySelector('.waka-intro-edge'), 'no match yet, so no light waits').toBeNull();
+  STATE.now = base({});
   await press('Introduce us');
   expect(vi.mocked(setIntroductionConsent)).toHaveBeenCalledWith(true);
   expect(bubble()).toContain('Introductions are on.');
@@ -88,6 +90,7 @@ it('the ask: a match, anonymous, with their light waiting at the edge', async ()
   expect(world.container.querySelector('.waka-intro-edge')).not.toBeNull();
   expect(world.container.querySelector('.waka-intro-guest'), 'nobody visits before both say yes').toBeNull();
   vi.mocked(answerIntroduction).mockResolvedValueOnce({ stage: 'waiting' });
+  STATE.now = base({});
   await press('Introduce us');
   expect(vi.mocked(answerIntroduction)).toHaveBeenCalledWith('i1', 'yes');
   expect(bubble()).toContain('If they say yes too');
@@ -104,6 +107,7 @@ it('the introduction: their creature, the real one in cooler light, beside yours
   expect(world.container.querySelector('.waka-intro-bridge')).not.toBeNull();
   expect(world.container.querySelector('.waka-intro-label--guest')?.textContent).toBe('Jun');
   expect(world.container.querySelector('.waka-principles-spark'), 'the spark steps aside for the guest').toBeNull();
+  STATE.now = base({});
   await press('Done');
   expect(vi.mocked(markIntroductionSeen)).toHaveBeenCalledWith('i1');
   expect(world.container.querySelector('.waka-intro-guest')).toBeNull();
@@ -113,6 +117,7 @@ it('saying no: their light leaves, nothing was shared, and turning introductions
   STATE.now = base({ introduction: { id: 'i1', stage: 'ask' } });
   world = await mountWorld(FACTS); await settle();
   vi.mocked(answerIntroduction).mockResolvedValueOnce({ stage: 'declined' });
+  STATE.now = base({});
   await press('Not now');
   expect(vi.mocked(answerIntroduction)).toHaveBeenCalledWith('i1', 'no');
   expect(bubble()).toContain('Nothing was shared, and they won’t know you were asked.');
@@ -127,4 +132,35 @@ it('says nothing where introductions are not offered', async () => {
   world = await mountWorld(FACTS); await settle();
   expect(world.container.querySelector('.waka-intro-bubble')).toBeNull();
   expect(world.container.querySelector('.waka-intro-edge')).toBeNull();
+});
+
+it('after Introduce us, keeps asking for a minute, so the first match shows without a reload', async () => {
+  STATE.now = base({ consent: { enabled: false, answered: false }, offerConsent: true });
+  world = await mountWorld(FACTS); await settle();
+  await press('Introduce us');
+  const asked = vi.mocked(fetchIntroductions).mock.calls.length;
+  STATE.now = base({ introduction: { id: 'i9', stage: 'ask' } });
+  await settle(1000);
+  expect(vi.mocked(fetchIntroductions).mock.calls.length, 'nothing asked again after turning on').toBeGreaterThan(asked);
+  expect(bubble(), 'the match the server made did not show').toContain('Someone else holds one of your principles.');
+});
+
+it('a line answering the last act never hides an ask the server has', async () => {
+  STATE.now = base({ introduction: { id: 'i1', stage: 'ask' } });
+  world = await mountWorld(FACTS); await settle();
+  vi.mocked(answerIntroduction).mockResolvedValueOnce({ stage: 'declined' });
+  STATE.now = base({ introduction: { id: 'i2', stage: 'ask' } });
+  await press('Not now');
+  expect(bubble()).toContain('Someone else holds one of your principles.');
+  expect(world.container.querySelector('.waka-intro-bubble .jar-char-bubble-act')?.textContent).toBe('Introduce us');
+});
+
+it('hears Settings turn introductions off, and drops what it was saying', async () => {
+  STATE.now = base({ introduction: { id: 'i1', stage: 'ask' } });
+  world = await mountWorld(FACTS); await settle();
+  expect(bubble()).toContain('Someone else holds');
+  STATE.now = base({ consent: { enabled: false, answered: true } });
+  await act(async () => { window.dispatchEvent(new CustomEvent(INTRODUCTIONS_CHANGED, { detail: { enabled: false } })); });
+  await settle();
+  expect(world.container.querySelector('.waka-intro-bubble')).toBeNull();
 });

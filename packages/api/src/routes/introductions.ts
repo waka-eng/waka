@@ -25,6 +25,7 @@ import {
   markIntroductionSeen,
   readIntroductionState,
   setIntroductionConsent,
+  type FollowUp,
 } from "../lib/introductions.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueIntroductionMatch } from "../lib/queue.js";
@@ -37,14 +38,14 @@ export interface IntroductionRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   available?: () => boolean;
-  requestMatch?: (profileId: string) => Promise<unknown>;
+  requestMatch?: (followUp: FollowUp) => Promise<unknown>;
 }
 
 export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {}): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
   const available = deps.available ?? (() => introductionsAvailable());
-  const requestMatch = deps.requestMatch ?? ((profileId: string) => enqueueIntroductionMatch(profileId));
+  const requestMatch = deps.requestMatch ?? ((followUp: FollowUp) => enqueueIntroductionMatch(followUp));
   routes.use("*", deps.authMiddleware ?? requireAuth);
   routes.use("*", humanSessionsOnly);
   routes.use("*", async (c, next) => { c.header("Cache-Control", "private, no-store"); await next(); });
@@ -54,7 +55,10 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
   };
   /* Asking for a match never fails the person's own act: the row is theirs
      either way, and the next answer or switch asks again. */
-  const askForMatch = async (profileId: string) => { if (available()) await requestMatch(profileId).catch(() => null); };
+  const askForMatch = async (followUps: FollowUp[]) => {
+    if (!available()) return;
+    for (const followUp of followUps) await requestMatch(followUp).catch(() => null);
+  };
 
   routes.get("/", async (c) => {
     return c.json(await readIntroductionState(getDatabase(), c.get("session").profile.id, available()));
@@ -67,8 +71,9 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
        offered: withdrawing consent must never depend on a flag. */
     if (body.enabled && !available()) return c.json(NOT_AVAILABLE, 404);
     const profileId = c.get("session").profile.id;
-    await setIntroductionConsent(getDatabase(), profileId, body.enabled);
-    if (body.enabled) await askForMatch(profileId);
+    /* On: a pass for this person. Off: a pass for anyone an unseen
+       introduction with this person was closed on, who is free again. */
+    await askForMatch(await setIntroductionConsent(getDatabase(), profileId, body.enabled));
     return c.json({ enabled: body.enabled });
   });
 
@@ -82,7 +87,7 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
     if (!outcome.ok) {
       return outcome.status === 404 ? c.json({ error: "Introduction not found" }, 404) : c.json({ error: "That introduction is no longer open" }, 409);
     }
-    if (outcome.result.stage !== "waiting") await askForMatch(profileId);
+    await askForMatch(outcome.followUps);
     return c.json(outcome.result);
   });
 
@@ -92,7 +97,7 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
     if (!id.success) return c.json({ error: "Invalid introduction" }, 400);
     const profileId = c.get("session").profile.id;
     if (!(await markIntroductionSeen(getDatabase(), profileId, id.data))) return c.json({ error: "Introduction not found" }, 404);
-    await askForMatch(profileId);
+    await askForMatch([{ profileId, key: "now" }]);
     return c.json({ seen: true });
   });
 
