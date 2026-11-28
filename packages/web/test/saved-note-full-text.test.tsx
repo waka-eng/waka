@@ -411,7 +411,8 @@ it('reopens every saved photo, recording and file through an owned read URL', as
     { id: 'document', type: 'file', label: 'notes.txt' },
   ] }, LONG);
   await answer(true);
-  expect([...host.querySelectorAll('.jar-saved-attachments img')].map(image => image.getAttribute('src')))
+  /* Each picture is the page's own (`NotePicture`, 2026-11-27). */
+  expect([...host.querySelectorAll('.waka-note-picture img')].map(image => image.getAttribute('src')))
     .toEqual(['https://bucket.test/photo-one', 'https://bucket.test/photo-two']);
   expect(host.querySelector('audio')?.getAttribute('src')).toBe('https://bucket.test/recording');
   expect(host.querySelector('audio')?.hasAttribute('controls')).toBe(true);

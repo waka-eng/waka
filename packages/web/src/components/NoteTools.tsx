@@ -124,6 +124,12 @@ export function NoteTools(props: {
       never kept has nothing yet to show anyone. */
   shareLabel?: string;
   onShare?: () => void;
+  /** Download the original of a picture this note holds. Absent when it
+      holds none. The page shows a picture trimmed; this is the whole file,
+      untouched (founder, 2026-11-27: "Open original image ↗" left the page,
+      and the original stays one press away here). */
+  downloadLabel?: string;
+  onDownload?: () => void;
   /** A chosen photo, OR a finished recording — `SavesOverlay` hands the same
       callback to the recorder, so one destination takes both kinds. That is
       why this component does not sniff the bytes before calling it even
@@ -162,6 +168,7 @@ export function NoteTools(props: {
   const menu = <MoreMenu label={props.moreLabel ?? "More"} disabled={props.saving}
     rows={[
       ...(props.onShare && props.shareLabel ? [{ label: props.shareLabel, icon: "share" as const, act: props.onShare }] : []),
+      ...(props.onDownload && props.downloadLabel ? [{ label: props.downloadLabel, icon: "download" as const, act: props.onDownload }] : []),
       { label: props.eraseLabel, icon: "erase" as const, act: props.onErase, disabled: props.eraseDisabled },
     ]} />;
   const actions = actionsSlot ? createPortal(menu, actionsSlot) : menu;
@@ -395,7 +402,7 @@ export function NoteTools(props: {
 function MoreMenu(props: {
   label: string;
   disabled?: boolean;
-  rows: Array<{ label: string; icon: "share" | "erase"; act: () => void; disabled?: boolean }>;
+  rows: Array<{ label: string; icon: "share" | "download" | "erase"; act: () => void; disabled?: boolean }>;
 }): JSX.Element {
   const menu = useDockMenu(props.disabled);
   return (

@@ -3,11 +3,12 @@ import { fetchAttachmentUrl, type ApiAttachmentSummary } from '../lib/api';
 import { t, type SupportedLocale } from '../lib/locales';
 import { AttachmentTranscript } from './AttachmentTranscript';
 import { AttachmentPreview } from './AttachmentPreview';
+import { NotePicture } from './NotePicture';
 
 function Attachment({ item, locale,readOnly,quiet }: { item: ApiAttachmentSummary; locale: SupportedLocale;readOnly:boolean;quiet:boolean }) {
   const [url, setUrl] = useState(''), [failed, setFailed] = useState(false), [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (item.type === 'link') return;
+    if (item.type === 'link' || item.type === 'image') return;
     const controller = new AbortController(); setUrl(''); setFailed(false);
     void fetchAttachmentUrl(item.id, controller.signal).then(value => { if (!controller.signal.aborted) setUrl(value); })
       .catch(() => { if (!controller.signal.aborted) setFailed(true); });
@@ -21,10 +22,15 @@ function Attachment({ item, locale,readOnly,quiet }: { item: ApiAttachmentSummar
      because the locale is plainly in use on the lines that have it; what was
      missing is invisible until you open the children. Both now require it. */
   if (item.type === 'link') return <div className="jar-saved-attachment"><AttachmentPreview item={item} locale={locale} readOnly={readOnly} /></div>;
+  /* ═══ A PICTURE IS SHOWN AS THE PAGE SHOWS IT (founder, 2026-11-27) ═════
+     Full width, trimmed of the other phone, a tap to see it whole. "Open
+     original image ↗" went: the whole view is the original, untrimmed, and
+     a saved inspiration's ⋯ downloads it. */
+  if (item.type === 'image') return <div className="jar-saved-attachment">
+    <NotePicture id={item.id} label={item.label} locale={locale} />
+    {!quiet ? <AttachmentPreview item={item} locale={locale} readOnly={readOnly} /> : null}
+  </div>;
   return <div className="jar-saved-attachment">
-    {url && item.type === 'image' && !failed ? <img src={url} alt={item.label} onError={() => setFailed(true)} /> : null}
-    {url && item.type === 'image' ? <a href={url} target="_blank" rel="noreferrer">{t(locale, 'worldAttachmentOpenOriginalImage')}</a> : null}
-    {item.type === 'image' && !quiet ? <AttachmentPreview item={item} locale={locale} readOnly={readOnly} /> : null}
     {url && item.type === 'audio' ? <audio controls preload="metadata" src={url} aria-label={item.label} onError={() => setFailed(true)} /> : null}
     {item.type === 'audio' && !quiet ? <AttachmentTranscript key={item.id} id={item.id} locale={locale} readOnly={readOnly} /> : null}
     {url && item.type === 'file' ? <a href={url} target="_blank" rel="noreferrer">{item.label}</a> : null}

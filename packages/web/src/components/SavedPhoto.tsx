@@ -17,6 +17,17 @@ export function firstPhoto(attachments: readonly ApiAttachmentSummary[]): string
   return attachments.find(item => item.type === 'image')?.id ?? null;
 }
 
+/** The picture a list row leads with, and the line read off THAT picture
+    (code review, 2026-11-28: never a thumbnail beside another picture's
+    words). The first picture the list carried a read line for, else the
+    first picture with no line. */
+export function leadPicture(attachments: readonly ApiAttachmentSummary[]): { id: string; line: string | null } | null {
+  const pictures = attachments.filter(item => item.type === 'image');
+  const read = pictures.find(item => item.readLine?.trim());
+  if (read) return { id: read.id, line: read.readLine!.trim() };
+  return pictures[0] ? { id: pictures[0].id, line: null } : null;
+}
+
 /** True when a save's preview is only the name of what is attached ("Photo",
     "2 photos"): there are no words of the person's to quote. */
 export function onlyAttachments(preview: string, attachments: readonly ApiAttachmentSummary[]): boolean {

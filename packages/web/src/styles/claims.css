@@ -7732,9 +7732,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   width: var(--sp-44); height: var(--sp-44); padding: 0; border: 0; border-radius: 50%;
   background: color-mix(in srgb, var(--paper) 40%, transparent); color: var(--ink);
 }
+/* UNDER THE PICTURE AS ITS QUOTE (founder, 2026-11-27, the picture-saves
+   board): a small label, the words, Fix in dim text at the right. The bar
+   that stood beside it went: light is the only meaning channel, and the
+   board draws none. */
 .waka-note-read {
-  display: flex; align-items: flex-start; gap: var(--sp-8); margin: var(--sp-12) 0 var(--sp-16); padding: var(--sp-12) var(--sp-4) 0 var(--sp-14);
-  border-left: 2px solid color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
+  display: flex; align-items: flex-start; gap: var(--sp-16); margin: var(--sp-20) 0 var(--sp-16); padding: 0;
 }
 .waka-note-read-body { flex: 1; min-width: 0; }
 .waka-note-read-label { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--t-meta); }
@@ -8420,11 +8423,23 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-saved-photo.waka-review-photo:empty { background: var(--waka-raised); border-radius: var(--sp-12); }
 .waka-review-reader-page > .waka-review-photo + .sr-only + .waka-review-reader-text { margin-top: var(--sp-16); }
 .waka-saved-photo.waka-review-photo--whole { height: 60svh; }
-/* In Inspirations: the words on the left, the picture at the row's end. */
-.waka-list-row:has(> .waka-list-photo) {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-16); align-items: center;
+/* ═══ INSPIRATIONS, LED BY PICTURES (founder, 2026-11-27, approving the
+   picture-saves board: "No more '#8 Oct 27' with a 48px thumbnail at the far
+   right") ═══ The picture stands at the row's START, 58x76 as the board
+   draws it, a phone's own shape, so a screenshot is recognisable at a
+   glance; its first read line and the date sit beside it. A text save keeps
+   its plain row: no empty picture slot. */
+.waka-list-row:has(> .waka-list-photo) { flex-direction: row; align-items: center; gap: var(--sp-14); }
+.waka-list-row > .waka-list-photo {
+  width: 58px; height: 76px; border-radius: var(--sp-6);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent);
 }
-.waka-list-row > .waka-list-photo { grid-column: 2; grid-row: 1 / span 3; }
+.waka-list-words { display: flex; flex-direction: column; gap: var(--sp-4); flex: 1; min-width: 0; }
+/* Two lines of what it says, as the board sets it; a sentence read off a
+   screenshot is rarely short enough for one. */
+.waka-list-words > .waka-list-lead {
+  white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
 }
 
 @layer chrome {
@@ -8676,5 +8691,104 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 /* MEASURED at 390 and 1280, the list's own 700px: the 16px gutter under it. */
 @media (max-width: 700px) {
   :is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > .waka-surface-head { width: 100%; }
+}
+}
+
+@layer chrome {
+/* ═══ THE PICTURE IS THE PAGE (founder, 2026-11-27, approving "A picture
+   save is the save") ═══ A saved picture fills the words' 40rem column,
+   trimmed of the other phone (`lib/picture-trim.ts`), at the 6px radius
+   with the soft lift and glow the board draws: held, not filed. The frame's
+   aspect is the trimmed picture's, and the picture is moved up inside it by
+   the trimmed top, so the stored file is shown, never changed. */
+.waka-over--note .waka-note-picture { width: 100%; max-width: 40rem; margin-inline: auto; }
+.waka-note-picture { margin: 0 0 var(--sp-4); }
+.waka-note-picture .waka-note-picture-open {
+  display: block; box-sizing: border-box; width: 100%; min-height: 0; margin: 0 auto; padding: 0;
+  border: 0; border-radius: var(--sp-6); overflow: hidden; cursor: zoom-in;
+  background: var(--waka-raised);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent),
+    0 18px 44px color-mix(in srgb, var(--bg) 38%, transparent),
+    0 0 60px color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.waka-note-picture .waka-note-picture-open:disabled { cursor: default; opacity: 1; }
+.waka-note-picture .waka-note-picture-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.waka-note-picture .waka-note-picture-open > img {
+  display: block; width: 100%; height: auto; max-width: none; max-height: none; border-radius: 0; image-orientation: from-image;
+}
+/* Until it lands, a quiet tile of a screenshot's shape holds the place. */
+.waka-note-picture--loading .waka-note-picture-open { aspect-ratio: 3 / 4; }
+.waka-note-picture--loading .waka-note-picture-open > img { opacity: 0; }
+.waka-note-picture-failed { margin: var(--sp-12) 0; color: var(--muted); font-size: var(--t-ui); }
+/* Try again is a quiet word by the polish pass's standard (2026-11-27): 44
+   tall, no ground, no underline, full ink beside the muted sentence. */
+.waka-note-picture-failed > button {
+  min-height: var(--waka-corner); padding: 0 var(--sp-4); border: 0; background: none;
+  color: var(--ink); font: inherit; text-decoration: none; cursor: pointer;
+}
+
+/* ON A DESK A TALL SCREENSHOT IS HELD TO THE WINDOW (board, desktop frame:
+   "a tall screenshot is held to the window's height so its words show
+   without scrolling. A wide picture takes the full column."). The width
+   follows from the height through the picture's own ratio, so it is never
+   cropped further, only smaller.
+   MEASURED 2026-11-27 at 1280x800, a 1179x2556 screenshot trimmed of its
+   status bar, header and tab bar: the header ends at 56px, the picture is
+   282x480 from 68px, and the quote with Edit sits at 572px, 67px tall, so
+   its last line ends at 639px, on screen with the bar below it. At 390x844
+   the column is 358px and the picture keeps it (358x609), as the board's
+   phone frames do; the switch is the note page's own 700px, where its
+   gutter rule above was measured.
+   NOT ON A SHORT WINDOW (code review, 2026-11-28). MEASURED at 844x390, a
+   phone on its side: 100dvh less 20rem is 70px, a sliver. Under 560px tall
+   the clamp is off and the picture takes the column, to scroll like any
+   page; above it the picture is never under 12rem (192px) tall. */
+@media (min-width: 701px) and (min-height: 560px) {
+  .waka-note-picture .waka-note-picture-open { width: min(100%, calc(max(12rem, 100dvh - 20rem) * var(--pic-ratio, 1))); }
+}
+
+/* "THE WORDS I READ" in the words' column, at body size (see `.waka-note-read`). */
+.waka-over--note .waka-note-read { width: 100%; max-width: 40rem; margin-inline: auto; box-sizing: border-box; }
+.waka-note-read .waka-note-read-text { font-size: var(--t-body); line-height: 1.5; text-wrap: pretty; }
+.waka-note-read .waka-note-read-act {
+  flex: none; min-height: var(--sp-44); padding: 0 var(--sp-4); border: 0; background: none;
+  color: var(--muted); font-size: var(--t-ui); cursor: pointer;
+}
+.waka-note-read .waka-note-read-act:is(:hover, :focus-visible) { color: var(--ink); }
+
+/* ═══ THE WHOLE PICTURE (founder, 2026-11-27: "Tapped: the whole picture,
+   edge to edge, pinch to zoom. The same chevron goes back.") ═══ Over
+   everything, on the night's deepest ground so the picture is the only
+   light; the page's own header row at the top, the picture fitted under it. */
+.waka-picture-whole {
+  position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column;
+  box-sizing: border-box; padding: calc(var(--sp-12) + env(safe-area-inset-top)) max(var(--sp-16), env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--sp-16), env(safe-area-inset-left));
+  background: var(--bg); color: var(--ink); font-family: var(--waka-face);
+  /* every surface is capped at 100dvh less 48px and scrolls
+     (`[data-jar-surface]`, home.css); this one is the whole screen and the
+     stage owns every touch, so neither applies */
+  max-height: none; overflow: hidden; touch-action: none;
+}
+.waka-picture-whole > .waka-surface-head > .waka-surface-back:is(.waka-surface-back, #waka-surface-head) { margin-inline-start: calc(-1 * var(--sp-12)); }
+.waka-picture-whole-stage {
+  position: relative; flex: 1; min-height: 0; overflow: hidden;
+  margin-inline: calc(-1 * max(var(--sp-16), env(safe-area-inset-left))) calc(-1 * max(var(--sp-16), env(safe-area-inset-right)));
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+/* The whole view's other corner: this picture's original, as an icon in
+   the header's right seat, dim until pressed like every corner control. */
+.waka-picture-whole .waka-picture-whole-download {
+  display: inline-grid; place-items: center; width: var(--waka-corner); height: var(--waka-corner); margin-inline-end: calc(-1 * var(--sp-10));
+  padding: 0; border: 0; border-radius: var(--r-pill); background: none; color: var(--muted); cursor: pointer;
+}
+.waka-picture-whole .waka-picture-whole-download:is(:hover, :focus-visible) { color: var(--ink); }
+/* Could not open, in the view: the page's own line, in the picture's place. */
+.waka-picture-whole-stage > .waka-picture-whole-lost { position: absolute; left: 0; right: 0; top: 40%; margin: 0; text-align: center; }
+.waka-picture-whole-said { flex: none; margin: var(--sp-8) 0 var(--sp-12); text-align: center; color: var(--muted); font-size: var(--t-ui); }
+.waka-picture-whole-stage > img {
+  /* the stage's box, the picture contained in it: a grid cell's auto row
+     let a tall screenshot overflow the screen's foot */
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain;
+  transform-origin: center; will-change: transform; image-orientation: from-image; -webkit-user-drag: none;
 }
 }
