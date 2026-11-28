@@ -8,7 +8,9 @@
  * is connected (a lit dot) or not (a dim one). Connect opens three steps in
  * place: make a key, copy a message, paste it into the tool. A connected
  * tool opens to what it read and Disconnect. The words MCP and API key appear
- * only under "Keys and details", for whoever wants them.
+ * nowhere: a key made any other way (before 2026-11-27, or by hand) is its
+ * own card under the tools, named as it was named, with Disconnect, so no
+ * live key is ever out of sight.
  *
  * A tool is connected when a live key carries its name: the key made in
  * step 1 is named after the tool, so the card and the key agree.
@@ -33,7 +35,7 @@ export function ConnectTools({ locale, profile }: {
   const [keys, setKeys] = useState<ApiProfileKey[] | null>(null);
   const [reads, setReads] = useState<ApiMcpRead[]>([]);
   const [failed, setFailed] = useState(false);
-  const [openTool, setOpenTool] = useState<McpClient | null>(null);
+  const [openCard, setOpenCard] = useState<string | null>(null);
   const load = useCallback(async () => {
     setFailed(false);
     try {
@@ -52,7 +54,14 @@ export function ConnectTools({ locale, profile }: {
         const key = keys.find(row => row.label === name) ?? null;
         return <ToolCard key={tool} locale={locale} profile={profile} tool={tool} name={name} live={key}
           reads={reads.filter(read => read.key.label === name && !read.key.revoked)}
-          open={openTool === tool} onToggle={() => setOpenTool(was => was === tool ? null : tool)}
+          open={openCard === tool} onToggle={() => setOpenCard(was => was === tool ? null : tool)}
+          onChanged={() => void load()} />;
+      })}
+      {keys.filter(row => !TOOLS.some(tool => mcpClientName(tool) === row.label)).map(row => {
+        const name = row.label || row.prefix;
+        return <ToolCard key={row.id} locale={locale} profile={profile} tool={null} name={name} live={row}
+          reads={reads.filter(read => read.key.prefix === row.prefix && !read.key.revoked)}
+          open={openCard === row.id} onToggle={() => setOpenCard(was => was === row.id ? null : row.id)}
           onChanged={() => void load()} />;
       })}
     </div>
@@ -61,7 +70,7 @@ export function ConnectTools({ locale, profile }: {
 
 function ToolCard({ locale, profile, tool, name, live, reads, open, onToggle, onChanged }: {
   locale: SupportedLocale; profile: { id: string; name: string; type: 'human' | 'agent' };
-  tool: McpClient; name: string; live: ApiProfileKey | null; reads: ApiMcpRead[];
+  tool: McpClient | null; name: string; live: ApiProfileKey | null; reads: ApiMcpRead[];
   open: boolean; onToggle: () => void; onChanged: () => void;
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
@@ -81,7 +90,7 @@ function ToolCard({ locale, profile, tool, name, live, reads, open, onToggle, on
         <span className="waka-connect-tool-act">{live ? '' : say('connectAction')}<span className="waka-settings-chevron" aria-hidden="true">{open ? '⌄' : '›'}</span></span>
       </button>
       {open ? live ? <Connected locale={locale} profile={profile} live={live} reads={reads} onChanged={onChanged} />
-        : <Steps locale={locale} profile={profile} tool={tool} name={name} onChanged={onChanged} /> : null}
+        : tool ? <Steps locale={locale} profile={profile} tool={tool} name={name} onChanged={onChanged} /> : null : null}
     </section>
   );
 }
@@ -96,6 +105,7 @@ function Steps({ locale, profile, tool, name, onChanged }: {
   const [allowSave, setAllowSave] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const prompt = mcpSetupPrompt({
     locale, profile, client: tool, scope: 'project',
     apiUrl: (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, ''),
@@ -104,7 +114,12 @@ function Steps({ locale, profile, tool, name, onChanged }: {
   const make = async () => {
     if (busy) return;
     setBusy(true); setError(false);
-    try { const key = await createProfileKey(profile, name, allowSave ? 'read_capture' : 'read_only'); setSecret(key.secret); }
+    try {
+      const key = await createProfileKey(profile, name, allowSave ? 'read_capture' : 'read_only');
+      /* A key the server says belongs to someone else is never shown. */
+      if (key.profileId !== profile.id) throw new Error('Key bound to another profile');
+      setSecret(key.secret);
+    }
     catch { setError(true); }
     finally { setBusy(false); }
   };
@@ -121,12 +136,14 @@ function Steps({ locale, profile, tool, name, onChanged }: {
             <span>{say('connectAllowSave')}</span>
           </label>
           <button type="button" className="waka-connect-button" disabled={busy} onClick={() => void make()}>{say('connectMakeKey')}</button>
-          {error ? <p className="waka-account-failed" role="alert">{say('profilePersonalMcpLoadError')}</p> : null}
+          {error ? <p className="waka-account-failed" role="alert">{say('profileApiKeysCreateError')}</p> : null}
         </>}
       </li>
       <li>
         <span className="waka-connect-step-title">{say('connectStepCopy')}</span>
-        <McpCopyBlock locale={locale} mode="button" text={prompt} copyLabel={say('connectCopyMessage')} />
+        <McpCopyBlock locale={locale} mode="button" text={prompt} copyLabel={say('connectCopyMessage')}
+          onCopied={() => setCopyFailed(false)} onCopyFailed={() => setCopyFailed(true)} />
+        {copyFailed ? <McpCopyBlock locale={locale} prompt scrollable mode="text" text={prompt} /> : null}
       </li>
       <li>
         <span className="waka-connect-step-title">{formatMessage(locale, 'connectStepPaste', { tool: name })}</span>
@@ -143,6 +160,7 @@ function Connected({ locale, profile, live, reads, onChanged }: {
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
   const now = Date.now();
   return (
     <div className="waka-connect-connected">
@@ -153,10 +171,19 @@ function Connected({ locale, profile, live, reads, onChanged }: {
           <span className="waka-connect-tool-status">{dateWords(Date.parse(read.readAt), now, locale)}</span>
         </li>)}
       </ul> : <p className="waka-settings-note">{say('connectNothingRead')}</p>}
-      <button type="button" className="waka-connect-button waka-connect-button--quiet" disabled={busy}
-        onClick={() => { setBusy(true); void revokeProfileKey(profile, live.id).then(onChanged).finally(() => setBusy(false)); }}>
+      {/* ONE QUESTION BEFORE CUTTING IT OFF, saying what stays. */}
+      {asking ? <>
+        <p className="waka-settings-note" role="status">{formatMessage(locale, 'connectDisconnectAsk', { name: live.label || live.prefix })}</p>
+        <span className="waka-session-actions">
+          <button type="button" className="waka-connect-button" disabled={busy}
+            onClick={() => { setBusy(true); void revokeProfileKey(profile, live.id).then(onChanged).finally(() => setBusy(false)); }}>
+            {say('connectDisconnect')}
+          </button>
+          <button type="button" className="waka-connect-button waka-connect-button--quiet" onClick={() => setAsking(false)}>{say('worldCancel')}</button>
+        </span>
+      </> : <button type="button" className="waka-connect-button waka-connect-button--quiet" onClick={() => setAsking(true)}>
         {say('connectDisconnect')}
-      </button>
+      </button>}
     </div>
   );
 }
