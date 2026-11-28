@@ -95,7 +95,7 @@ describe("consent", () => {
     expect(await matchIntroductionsForProfile(t.db as never, p.profileId, { available: false })).toBe("off");
     const before = process.env.WAKA_INTRODUCTIONS;
     delete process.env.WAKA_INTRODUCTIONS;
-    try { expect(await enqueueIntroductionMatch(p.profileId, t.db as never), "the queue stays empty without the flag").toBeNull(); }
+    try { expect(await enqueueIntroductionMatch({ profileId: p.profileId, key: "now" }, t.db as never), "the queue stays empty without the flag").toBeNull(); }
     finally { if (before !== undefined) process.env.WAKA_INTRODUCTIONS = before; }
     expect(await t.sql`SELECT id FROM background_jobs WHERE type='match_introductions'`).toHaveLength(0);
   });
@@ -105,7 +105,7 @@ describe("consent", () => {
     const before = process.env.WAKA_INTRODUCTIONS;
     process.env.WAKA_INTRODUCTIONS = "1";
     try {
-      await enqueueIntroductionMatch(p.profileId, t.db as never); await enqueueIntroductionMatch(p.profileId, t.db as never);
+      await enqueueIntroductionMatch({ profileId: p.profileId, key: "now" }, t.db as never); await enqueueIntroductionMatch({ profileId: p.profileId, key: "now" }, t.db as never);
       const later = new Date(Date.now() + 14 * 86_400_000);
       await enqueueIntroductionMatch({ profileId: p.profileId, key: "waited:x", runAfter: later }, t.db as never);
       const rows = await t.sql`SELECT idempotency_key, run_after FROM background_jobs WHERE type='match_introductions' AND profile_id=${p.profileId} ORDER BY run_after`;
@@ -193,6 +193,14 @@ describe("matching", () => {
     expect(await t.sql`SELECT id FROM introductions`).toHaveLength(0);
   });
 
+  it("only reads candidates who hold a principle, so the bound is never spent on people who could not match", async () => {
+    const a = await person(); await principle(a, FINISH); await consent(a);
+    const empty = await person(); await consent(empty);
+    const holder = await person(); await principle(holder, FINISH_TOO); await consent(holder);
+    await t.sql`UPDATE introduction_consents SET updated_at = now() - interval '300 days' WHERE profile_id = ${holder.profileId}`;
+    expect(await matchIntroductionsForProfile(t.db as never, a.profileId, { available: true, candidateLimit: 1 })).toBe("matched");
+  });
+
   it("reads the most recently active consents first", async () => {
     const a = await person();
     await principle(a, FINISH); await consent(a);
@@ -233,7 +241,6 @@ describe("matching", () => {
       expect(withdrew.answered, how).toEqual(silent.answered);
       expect(withdrew.after, how).toEqual(silent.after);
       expect(withdrew.busy, `${how}: the other side was freed early`).toBe("busy");
-      expect(withdrew.row!.closed_at, how).toBeNull();
       expect([withdrew.row![`principle_${withdrew.aSide}_text`], withdrew.row![`principle_${withdrew.aSide}_id`]], `${how}: withdrawn words kept`).toEqual([null, null]);
       expect(withdrew.row![`withdrawn_${withdrew.aSide}_at`], how).not.toBeNull();
       /* The withdrawer is free now, and marked to be looked at again. */
@@ -274,10 +281,44 @@ describe("matching", () => {
 
 
 
-  it("erasing a person takes their introductions with them", async () => {
-    const { a } = await pair();
-    await t.sql`DELETE FROM accounts WHERE id=${a.accountId}`;
-    expect(await t.sql`SELECT id FROM introductions`).toHaveLength(0);
+  it("erasing an account withdraws its side: nothing of the erased person is left, and the other side sees exactly what silence shows", async () => {
+    const observe = async (erase: boolean) => {
+      await t.truncateAll();
+      const { a, b, id } = await pair();
+      const rb = routed(b);
+      const before = await rb.raw();
+      if (erase) await t.sql`DELETE FROM accounts WHERE id=${a.accountId}`;
+      const view = await rb.raw();
+      const answered = await (await rb.post(`/${id}/answer`, { answer: "yes" })).json();
+      return { a, b, id, same: view === before, answered, after: await rb.raw(), busy: await match(b) };
+    };
+    const silent = await observe(false), erased = await observe(true);
+    expect(erased.same, "the other side's ask changed on erasure").toBe(true);
+    expect(erased.answered).toEqual(silent.answered);
+    expect(erased.after).toEqual(silent.after);
+    expect(erased.busy).toBe("busy");
+    const [row] = await t.sql`SELECT * FROM introductions WHERE id=${erased.id}`;
+    const side = row!.profile_a_id === erased.b.profileId ? "b" : "a";
+    expect([row![`profile_${side}_id`], row![`principle_${side}_id`], row![`principle_${side}_text`]], "something of the erased person is left").toEqual([null, null, null]);
+    expect(row![`withdrawn_${side}_at`]).not.toBeNull();
+    /* And an accepted card the other side has not dismissed stays as it was. */
+    await t.truncateAll();
+    const p = await pair();
+    await routed(p.a).post(`/${p.id}/answer`, { answer: "yes" });
+    await routed(p.b).post(`/${p.id}/answer`, { answer: "yes" });
+    const card = await routed(p.b).raw();
+    await t.sql`DELETE FROM accounts WHERE id=${p.a.accountId}`;
+    expect(await routed(p.b).raw()).toBe(card);
+  });
+
+  it("marks an owner only while their introductions are on", async () => {
+    const { a, id } = await pair();
+    await t.sql`UPDATE introduction_consents SET enabled = false WHERE profile_id = ${a.profileId}`;
+    await t.sql`DELETE FROM introduction_followups`;
+    await t.sql`UPDATE principles SET statement = 'Something else entirely now.' WHERE profile_id = ${a.profileId}`;
+    expect(await t.sql`SELECT profile_id FROM introduction_followups`).toHaveLength(0);
+    const [row] = await t.sql`SELECT principle_a_text, principle_b_text FROM introductions WHERE id=${id}`;
+    expect([row!.principle_a_text, row!.principle_b_text]).toContain(null);
   });
 });
 
@@ -297,6 +338,12 @@ describe("answering", () => {
     for (const leak of [FINISH_TOO, "Jun", "Park", b.profileId]) expect(seen, `A's introduction carries ${leak}`).not.toContain(leak);
     expect((await ra.post(`/${id}/seen`)).status).toBe(200);
     expect((await ra.state()).introduction).toBeNull();
+    const passes = ra.requestMatch.mock.calls.length;
+    expect((await ra.post(`/${id}/seen`)).status, "Done twice").toBe(200);
+    expect(ra.requestMatch.mock.calls.length, "a second Done queued a pass for nothing").toBe(passes);
+    await t.sql`UPDATE introduction_consents SET enabled = false WHERE profile_id = ${b.profileId}`;
+    expect((await rb.post(`/${id}/seen`)).status, "Done by someone who turned off").toBe(404);
+    await t.sql`UPDATE introduction_consents SET enabled = true WHERE profile_id = ${b.profileId}`;
     expect((await rb.state()).introduction, "B's Done is B's own").toMatchObject({ stage: "introduced" });
     expect(ra.requestMatch, "settling asks for the next match").toHaveBeenCalledWith({ profileId: a.profileId, key: "now" });
   });

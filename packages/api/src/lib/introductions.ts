@@ -189,7 +189,6 @@ function mine(row: Row, profileId: string) {
 }
 const within = (from: Date | null, now: Date) => Boolean(from) && now.getTime() - from!.getTime() < WINDOW_MS;
 export function sideState(row: Row, profileId: string, now: Date): "ask" | "waiting" | "introduced" | null {
-  if (row.closedAt) return null;
   const me = mine(row, profileId);
   if (me.withdrawn) return null;
   if (row.status === "accepted") return me.seen ? null : "introduced";
@@ -205,7 +204,7 @@ const BUSY = (who: SQL) => {
   const side = (s: "a" | "b") => sql`(${sql.raw(`i.profile_${s}_id`)} = ${who} AND ${sql.raw(`i.withdrawn_${s}_at`)} IS NULL AND (
       (i.status = 'accepted' AND ${sql.raw(`i.seen_${s}_at`)} IS NULL)
       OR (i.status <> 'accepted' AND (${sql.raw(`i.answer_${s}`)} IS NULL OR ${sql.raw(`i.answer_${s}`)} = 'yes') AND i.created_at > now() - ${w})))`;
-  return sql`EXISTS (SELECT 1 FROM introductions i WHERE i.closed_at IS NULL AND (${side("a")} OR ${side("b")}))`;
+  return sql`EXISTS (SELECT 1 FROM introductions i WHERE ${side("a")} OR ${side("b")})`;
 };
 
 /** A match pass to queue for a person who has just become free, or will at `runAfter`. */
@@ -266,7 +265,7 @@ export async function readIntroductionState(db: Pick<Db, "select" | "execute">, 
   }
   if (!consent.enabled) return state;
   const now = await dbNow(db);
-  const rows = await db.select().from(introductions).where(and(involves(profileId), isNull(introductions.closedAt)))
+  const rows = await db.select().from(introductions).where(involves(profileId))
     .orderBy(asc(introductions.createdAt), asc(introductions.id));
   /* An introduction both said yes to comes first; then the oldest ask this
      person has not answered. Nothing about the other side's answer is read
@@ -352,8 +351,9 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
     /* Only the other side's yes completes it, and only while they still have
        introductions on: a yes from someone who has since turned them off just
        lapses, as if they had never answered. */
-    const [otherConsent] = await tx.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
-      .where(eq(introductionConsents.profileId, otherId)).limit(1);
+    /* An erased account leaves its side null and withdrawn: never completes. */
+    const [otherConsent] = otherId ? await tx.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
+      .where(eq(introductionConsents.profileId, otherId)).limit(1) : [];
     const completes = answer === "yes" && otherAnswer === "yes" && !otherWithdrawn && Boolean(otherConsent?.enabled);
     const status = completes ? "accepted" : answer === "no" && row.status === "offered" ? "declined" : row.status;
     await tx.update(introductions).set({
@@ -374,20 +374,28 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
     : { ok: true, result: { stage: "waiting" }, followUps: [] };
 }
 
-/** Done on the introduction: it is not shown to this side again. */
-export async function markIntroductionSeen(db: Db, profileId: string, id: string): Promise<boolean> {
+/**
+ * Done on the introduction: it is not shown to this side again. Under the
+ * same lock as every other act, and only for a side that still has
+ * introductions on and has not withdrawn. `changed` is false when it had
+ * already been dismissed, so no pass is queued for nothing.
+ */
+export async function markIntroductionSeen(db: Db, profileId: string, id: string): Promise<"changed" | "unchanged" | "missing"> {
   return db.transaction(async (tx) => {
-    const rows = await tx.execute(sql`
-      UPDATE introductions SET
-        seen_a_at = CASE WHEN profile_a_id = ${profileId}::uuid THEN coalesce(seen_a_at, now()) ELSE seen_a_at END,
-        seen_b_at = CASE WHEN profile_b_id = ${profileId}::uuid THEN coalesce(seen_b_at, now()) ELSE seen_b_at END,
-        updated_at = now()
-      WHERE id = ${id}::uuid AND status = 'accepted' AND closed_at IS NULL
-        AND (profile_a_id = ${profileId}::uuid OR profile_b_id = ${profileId}::uuid)
-      RETURNING id`);
-    if (!(rows as unknown as unknown[]).length) return false;
+    await lockIntroductions(tx);
+    const [consent] = await tx.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
+      .where(eq(introductionConsents.profileId, profileId)).limit(1);
+    if (!consent?.enabled) return "missing";
+    const [row] = await tx.select().from(introductions).where(and(eq(introductions.id, id), involves(profileId))).for("update").limit(1);
+    if (!row || row.status !== "accepted") return "missing";
+    const me = mine(row, profileId);
+    if (me.withdrawn) return "missing";
+    if (me.seen) return "unchanged";
+    const a = row.profileAId === profileId;
+    await tx.update(introductions).set({ ...(a ? { seenAAt: sql`now()` } : { seenBAt: sql`now()` }), updatedAt: sql`now()` })
+      .where(eq(introductions.id, row.id));
     await touch(tx, profileId);
-    return true;
+    return "changed";
   });
 }
 
@@ -429,6 +437,7 @@ export async function matchIntroductionsForProfile(db: Db, profileId: string, op
     SELECT p.id FROM profiles p JOIN introduction_consents c ON c.profile_id = p.id AND c.enabled
      WHERE p.type = 'human' AND p.account_id IS NOT NULL AND p.account_id <> ${me.accountId}::uuid
        AND p.id <> ${profileId}::uuid
+       AND EXISTS (SELECT 1 FROM principles h WHERE h.profile_id = p.id AND h.state = 'held' AND h.unsupported_at IS NULL)
        AND NOT EXISTS (SELECT 1 FROM introductions i
                         WHERE (i.profile_a_id = p.id AND i.profile_b_id = ${profileId}::uuid)
                            OR (i.profile_b_id = p.id AND i.profile_a_id = ${profileId}::uuid))

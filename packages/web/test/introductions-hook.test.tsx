@@ -74,3 +74,20 @@ it("does nothing at all without the session's own profile", async () => {
   expect(vi.mocked(fetchIntroductions)).not.toHaveBeenCalled();
   expect(seen?.stage).toBeNull();
 });
+
+it("drops a read that was in flight when the person pressed Not now, so the ask never comes back", async () => {
+  vi.mocked(fetchIntroductions).mockResolvedValue(state({ introduction: { id: "i1", stage: "ask" } }));
+  await mount("p1"); await flush();
+  expect(seen?.stage).toBe("ask-match");
+  /* A read starts (the tab came back) and is still out when Not now lands. */
+  let release: (value: ApiIntroductionState) => void = () => undefined;
+  vi.mocked(fetchIntroductions).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  const reads = vi.mocked(fetchIntroductions).mock.calls.length;
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+  expect(vi.mocked(fetchIntroductions).mock.calls.length, "the in-flight read never started").toBe(reads + 1);
+  vi.mocked(fetchIntroductions).mockResolvedValue(state({}));
+  await act(async () => seen!.notNow()); await flush();
+  await act(async () => release(state({ introduction: { id: "i1", stage: "ask" } })));
+  await flush();
+  expect(seen?.stage, "a stale read brought the ask back").toBe("declined");
+});

@@ -707,10 +707,10 @@ export async function enqueueHunchAfterCorrection(profileId: string, hunchId: st
  * ask or a waiting yes lapsing quietly). Only where `WAKA_INTRODUCTIONS=1`;
  * otherwise nothing is enqueued. Keyed per person and reason, so a burst
  * asks once and a delayed lapse is never absorbed by an immediate pass. */
-export async function enqueueIntroductionMatch(followUp: FollowUp | string,
+export async function enqueueIntroductionMatch(followUp: FollowUp,
   transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult | null> {
   if (!introductionsAvailable()) return null;
-  const { profileId, key, runAfter } = typeof followUp === "string" ? { profileId: followUp, key: "now", runAfter: undefined } : followUp;
+  const { profileId, key, runAfter } = followUp;
   return enqueueKeyedJob({ profileId, type: "match_introductions", payload: { reason: key },
     idempotencyKey: `match_introductions:${profileId}:${key}`, ...(runAfter ? { runAfter } : {}) }, transaction);
 }
@@ -721,10 +721,14 @@ export async function enqueueIntroductionMatch(followUp: FollowUp | string,
  * match passes, through the one enqueue path. Bounded and skip-locked, so
  * two drains never take the same mark. The marks are taken and the jobs
  * written in ONE transaction, so a failure leaves every mark in place for the
- * next drain. Called by the worker on every drain and after principle work.
+ * next drain. Called by the worker once per drain and once after principle
+ * work; a cheap EXISTS outside any transaction makes the common case (no
+ * marks) one indexed read.
  */
 export async function drainIntroductionFollowUps(db: ReturnType<typeof getDb> = getDb()): Promise<number> {
   if (!introductionsAvailable()) return 0;
+  const [marked] = (await db.execute(sql`SELECT EXISTS (SELECT 1 FROM introduction_followups) AS "any"`)) as unknown as Array<{ any: boolean }>;
+  if (!marked?.any) return 0;
   return db.transaction(async (tx) => {
     const rows = (await tx.execute(sql`
       DELETE FROM introduction_followups WHERE profile_id IN (
@@ -1311,11 +1315,10 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
         expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
         beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
-      /* Principles may have become held: a consenting person is looked at
-         again (introductions, flag-gated, no model call). Never fails the
-         principle work it follows. */
-      /* A principle that became held marked its consenting owner (migration
-         0097); turn the mark into a pass now rather than at the next drain. */
+      /* Introductions: a principle that became held (or was withdrawn) here
+         marked its consenting owner (migration 0097's trigger); turn marks
+         into match passes now rather than at the next drain. Flag-gated, no
+         model call, and it never fails the principle work it follows. */
       await drainIntroductionFollowUpsLogged();
       return;
     }

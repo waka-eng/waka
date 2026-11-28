@@ -1,5 +1,5 @@
 {
-  "id": "ad1cc95d-073f-419c-8f73-08696af5fbd9",
+  "id": "64a357b4-178d-47d4-ba2a-1b46131588e5",
   "prevId": "f76e35f5-a403-48d9-a718-52dc4510a0ba",
   "version": "7",
   "dialect": "postgresql",
@@ -10005,13 +10005,13 @@
           "name": "profile_a_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "profile_b_id": {
           "name": "profile_b_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "principle_a_id": {
           "name": "principle_a_id",
@@ -10092,12 +10092,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -10162,7 +10156,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "introductions_profile_b_id_profiles_id_fk": {
@@ -10175,7 +10169,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "introductions_principle_a_fk": {

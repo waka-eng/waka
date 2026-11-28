@@ -73,13 +73,16 @@ export function useIntroductions(profileId: string | null): Introductions {
   const poll = useRef<{ timer: number; until: number }>({ timer: 0, until: 0 });
   useEffect(() => { alive.current = true; return () => { alive.current = false; window.clearTimeout(poll.current.timer); }; }, []);
 
-  /* A read that lands after the profile changed is dropped, not shown. */
-  const current = useRef(profileId);
-  current.current = profileId;
+  /* A GENERATION FOR EVERY READ. Each act, and each change of profile,
+     starts a new one and stops any polling; a read that answers for an older
+     generation is dropped. So a read already in flight when the person
+     pressed Not now or Turn off can never bring the ask back. */
+  const generation = useRef(0);
+  const fence = useCallback(() => { generation.current += 1; window.clearTimeout(poll.current.timer); }, []);
   const load = useCallback(() => {
     if (!profileId) return;
-    const asked = profileId;
-    void fetchIntroductions().then((next) => { if (alive.current && current.current === asked) setServer(next); }).catch(() => undefined);
+    const asked = generation.current;
+    void fetchIntroductions().then((next) => { if (alive.current && generation.current === asked) setServer(next); }).catch(() => undefined);
   }, [profileId]);
   /** Read now and every few seconds for a minute: the first match is made right after turning on. */
   const pollAwhile = useCallback(() => {
@@ -92,7 +95,7 @@ export function useIntroductions(profileId: string | null): Introductions {
     tick();
   }, [load]);
   useEffect(() => {
-    setServer(null); setLocal(null); window.clearTimeout(poll.current.timer);
+    fence(); setServer(null); setLocal(null);
     if (!active) return undefined;
     load();
     const back = () => { if (document.visibilityState === "visible") load(); };
@@ -107,7 +110,7 @@ export function useIntroductions(profileId: string | null): Introductions {
       document.removeEventListener("visibilitychange", back);
       window.removeEventListener(INTRODUCTIONS_CHANGED, changed);
     };
-  }, [active, profileId, load, pollAwhile]);
+  }, [active, profileId, load, pollAwhile, fence]);
 
   const shown = server?.available ? server : null;
   const intro = shown?.introduction ?? null;
@@ -115,54 +118,62 @@ export function useIntroductions(profileId: string | null): Introductions {
     intro?.stage === "introduced" ? "introduced" : intro?.stage === "ask" ? "ask-match"
       : local ?? (shown?.offerConsent ? "ask-consent" : null);
 
+  /* Fenced before the write and again when it lands, so neither a read from
+     before the act nor one started while it was in flight can answer it. */
   const run = useCallback((work: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
-    void work().catch(() => { setLocal(null); load(); }).finally(() => { if (alive.current) setBusy(false); });
-  }, [busy, load]);
+    fence();
+    void work().catch(() => { setLocal(null); fence(); load(); }).finally(() => { if (alive.current) setBusy(false); });
+  }, [busy, load, fence]);
 
   const introduce = useCallback(() => run(async () => {
     if (stage === "ask-consent") {
       await setIntroductionConsent(true);
+      fence();
       announce(true);
       setServer((s) => s && { ...s, offerConsent: false, consent: { enabled: true, answered: true } });
       setLocal("on");
       pollAwhile();
     } else if (stage === "ask-match" && intro) {
       const result = await answerIntroduction(intro.id, "yes");
+      fence();
       if (result.stage === "introduced") setServer((s) => s && { ...s, introduction: result });
       else { setServer((s) => s && { ...s, introduction: null }); setLocal("waiting"); pollAwhile(); }
     }
-  }), [run, stage, intro, pollAwhile]);
+  }), [run, stage, intro, pollAwhile, fence]);
 
   const notNow = useCallback(() => run(async () => {
     if (stage === "ask-consent") {
       await setIntroductionConsent(false);
+      fence();
       setServer((s) => s && { ...s, offerConsent: false, consent: { enabled: false, answered: true } });
     } else if (stage === "ask-match" && intro) {
       await answerIntroduction(intro.id, "no");
+      fence();
       setServer((s) => s && { ...s, introduction: null });
       setLocal("declined");
       pollAwhile();
     }
-  }), [run, stage, intro, pollAwhile]);
+  }), [run, stage, intro, pollAwhile, fence]);
 
   const done = useCallback(() => {
     if (stage === "introduced" && intro) {
-      run(async () => { await markIntroductionSeen(intro.id); setServer((s) => s && { ...s, introduction: null }); pollAwhile(); });
+      run(async () => { await markIntroductionSeen(intro.id); fence(); setServer((s) => s && { ...s, introduction: null }); pollAwhile(); });
       return;
     }
+    fence();
     setLocal(null);
     pollAwhile();
-  }, [run, stage, intro, pollAwhile]);
+  }, [run, stage, intro, pollAwhile, fence]);
 
   const turnOff = useCallback(() => run(async () => {
     await setIntroductionConsent(false);
+    fence();
     announce(false);
-    window.clearTimeout(poll.current.timer);
     setServer((s) => s && { ...s, introduction: null, offerConsent: false, consent: { enabled: false, answered: true } });
     setLocal("off");
-  }), [run]);
+  }), [run, fence]);
 
   return {
     stage,

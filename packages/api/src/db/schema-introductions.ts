@@ -54,8 +54,14 @@ export type IntroductionAnswer = (typeof introductionAnswerValues)[number];
 
 export const introductions = pgTable("introductions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  profileAId: uuid("profile_a_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  profileBId: uuid("profile_b_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  /**
+   * Null once that person's account is erased. Erasure is a withdrawal of
+   * their side (migration 0097's profile trigger erases their words first),
+   * never a delete of the shared row: deleting it would change what the
+   * other side sees, and so tell them something.
+   */
+  profileAId: uuid("profile_a_id").references(() => profiles.id, { onDelete: "set null" }),
+  profileBId: uuid("profile_b_id").references(() => profiles.id, { onDelete: "set null" }),
   /** Null once that side withdrew the principle (reworded or deleted it). */
   principleAId: uuid("principle_a_id"),
   principleBId: uuid("principle_b_id"),
@@ -74,8 +80,6 @@ export const introductions = pgTable("introductions", {
   /** That side withdrew its principle: it sees nothing more, and the row can never complete. */
   withdrawnAAt: timestamp("withdrawn_a_at", { withTimezone: true }),
   withdrawnBAt: timestamp("withdrawn_b_at", { withTimezone: true }),
-  /** Closed for both: a complete introduction one side turned off before both saw it. */
-  closedAt: timestamp("closed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({

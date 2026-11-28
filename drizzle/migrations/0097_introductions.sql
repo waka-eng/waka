@@ -13,8 +13,8 @@ CREATE TABLE "introduction_followups" (
 --> statement-breakpoint
 CREATE TABLE "introductions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"profile_a_id" uuid NOT NULL,
-	"profile_b_id" uuid NOT NULL,
+	"profile_a_id" uuid,
+	"profile_b_id" uuid,
 	"principle_a_id" uuid,
 	"principle_b_id" uuid,
 	"principle_a_text" text,
@@ -28,7 +28,6 @@ CREATE TABLE "introductions" (
 	"seen_b_at" timestamp with time zone,
 	"withdrawn_a_at" timestamp with time zone,
 	"withdrawn_b_at" timestamp with time zone,
-	"closed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "introductions_ordered_pair_check" CHECK ("introductions"."profile_a_id" < "introductions"."profile_b_id"),
@@ -38,14 +37,16 @@ CREATE TABLE "introductions" (
 --> statement-breakpoint
 ALTER TABLE "introduction_consents" ADD CONSTRAINT "introduction_consents_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introduction_followups" ADD CONSTRAINT "introduction_followups_profile_id_profiles_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_a_id_profiles_id_fk" FOREIGN KEY ("profile_a_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_b_id_profiles_id_fk" FOREIGN KEY ("profile_b_id") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_a_id_profiles_id_fk" FOREIGN KEY ("profile_a_id") REFERENCES "public"."profiles"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_b_id_profiles_id_fk" FOREIGN KEY ("profile_b_id") REFERENCES "public"."profiles"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_a_fk" FOREIGN KEY ("profile_a_id","principle_a_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_b_fk" FOREIGN KEY ("profile_b_id","principle_b_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "introductions_pair_unique_idx" ON "introductions" USING btree ("profile_a_id","profile_b_id");--> statement-breakpoint
 CREATE INDEX "introductions_profile_b_idx" ON "introductions" USING btree ("profile_b_id");--> statement-breakpoint
 -- Introductions are between people. An agent or a room's mind can neither
 -- consent nor be introduced, whatever route or job tries to write the row.
+-- Checked on insert only: a pair's profile ids change only to NULL, when an
+-- account is erased.
 CREATE OR REPLACE FUNCTION "introductions_humans_only"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_TABLE_NAME = 'introduction_consents' THEN
@@ -60,8 +61,33 @@ END;
 $$;--> statement-breakpoint
 CREATE TRIGGER "introduction_consents_humans_only" BEFORE INSERT OR UPDATE OF "profile_id" ON "introduction_consents"
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
-CREATE TRIGGER "introductions_humans_only" BEFORE INSERT OR UPDATE OF "profile_a_id", "profile_b_id" ON "introductions"
+CREATE TRIGGER "introductions_humans_only" BEFORE INSERT ON "introductions"
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
+-- ERASING AN ACCOUNT WITHDRAWS ITS SIDE, IT DOES NOT DELETE THE SHARED ROW.
+-- Deleting the row would change what the other side sees, and so tell them
+-- something. Before the profile goes, its side's words and principle id are
+-- erased, an open answer becomes no, and the side is marked withdrawn; the
+-- foreign key then sets its profile id to NULL. Nothing that identifies the
+-- erased person is left, and the other side's view lapses as usual.
+CREATE OR REPLACE FUNCTION "withdraw_profile_from_introductions"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE "introductions" SET
+    "principle_a_id" = CASE WHEN "profile_a_id" = OLD."id" THEN NULL ELSE "principle_a_id" END,
+    "principle_a_text" = CASE WHEN "profile_a_id" = OLD."id" THEN NULL ELSE "principle_a_text" END,
+    "withdrawn_a_at" = CASE WHEN "profile_a_id" = OLD."id" THEN coalesce("withdrawn_a_at", now()) ELSE "withdrawn_a_at" END,
+    "answer_a" = CASE WHEN "profile_a_id" = OLD."id" AND "status" = 'offered' THEN 'no' ELSE "answer_a" END,
+    "principle_b_id" = CASE WHEN "profile_b_id" = OLD."id" THEN NULL ELSE "principle_b_id" END,
+    "principle_b_text" = CASE WHEN "profile_b_id" = OLD."id" THEN NULL ELSE "principle_b_text" END,
+    "withdrawn_b_at" = CASE WHEN "profile_b_id" = OLD."id" THEN coalesce("withdrawn_b_at", now()) ELSE "withdrawn_b_at" END,
+    "answer_b" = CASE WHEN "profile_b_id" = OLD."id" AND "status" = 'offered' THEN 'no' ELSE "answer_b" END,
+    "status" = CASE WHEN "status" = 'offered' THEN 'declined' ELSE "status" END,
+    "updated_at" = now()
+   WHERE "profile_a_id" = OLD."id" OR "profile_b_id" = OLD."id";
+  RETURN OLD;
+END;
+$$;--> statement-breakpoint
+CREATE TRIGGER "profiles_withdraw_from_introductions" BEFORE DELETE ON "profiles"
+  FOR EACH ROW EXECUTE FUNCTION "withdraw_profile_from_introductions"();--> statement-breakpoint
 -- A PRINCIPLE LEAVING OR JOINING WHAT A PERSON HOLDS.
 --
 -- Leaving (rewording it, deleting it, or it ceasing to be held: contested,
@@ -73,13 +99,12 @@ CREATE TRIGGER "introductions_humans_only" BEFORE INSERT OR UPDATE OF "profile_a
 -- offered again. Runs BEFORE a delete so the composite foreign key (no
 -- action) never sees a dangling citation.
 --
--- Joining (a principle becoming held, by any path) is a reason to look again
--- for someone with introductions on.
+-- Joining (a principle becoming held, by any path) is a reason to look again.
 --
--- Either way the person is only MARKED, in introduction_followups; the
--- application turns marks into ordinary queue jobs (drainIntroductionFollowUps
--- in lib/queue.ts), so the queue keeps one enqueue path. A profile already
--- gone (an account being erased) is never marked.
+-- Either way the owner is only MARKED, in introduction_followups, and only
+-- while their introductions are on; the application turns marks into
+-- ordinary queue jobs (drainIntroductionFollowUps in lib/queue.ts), so the
+-- queue keeps one enqueue path. A profile already gone is never marked.
 CREATE OR REPLACE FUNCTION "principle_introductions_follow"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   was_held boolean := TG_OP <> 'INSERT' AND OLD."state" = 'held' AND OLD."unsupported_at" IS NULL;
@@ -100,8 +125,8 @@ BEGIN
         OR ("profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id");
     GET DIAGNOSTICS withdrawn = ROW_COUNT;
   END IF;
-  IF (withdrawn > 0 OR (is_held AND NOT was_held AND EXISTS (
-        SELECT 1 FROM "introduction_consents" c WHERE c."profile_id" = owner AND c."enabled")))
+  IF (withdrawn > 0 OR (is_held AND NOT was_held))
+     AND EXISTS (SELECT 1 FROM "introduction_consents" c WHERE c."profile_id" = owner AND c."enabled")
      AND EXISTS (SELECT 1 FROM "profiles" WHERE "id" = owner) THEN
     INSERT INTO "introduction_followups" ("profile_id") VALUES (owner) ON CONFLICT ("profile_id") DO NOTHING;
   END IF;

@@ -71,8 +71,8 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
        offered: withdrawing consent must never depend on a flag. */
     if (body.enabled && !available()) return c.json(NOT_AVAILABLE, 404);
     const profileId = c.get("session").profile.id;
-    /* On: a pass for this person. Off: a pass for anyone an unseen
-       introduction with this person was closed on, who is free again. */
+    /* On: a pass for this person. Off: nothing to queue; only this
+       person's side is withdrawn, and the other side lapses as usual. */
     await askForMatch(await setIntroductionConsent(getDatabase(), profileId, body.enabled));
     return c.json({ enabled: body.enabled });
   });
@@ -96,8 +96,9 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
     const id = z.string().uuid().safeParse(c.req.param("id"));
     if (!id.success) return c.json({ error: "Invalid introduction" }, 400);
     const profileId = c.get("session").profile.id;
-    if (!(await markIntroductionSeen(getDatabase(), profileId, id.data))) return c.json({ error: "Introduction not found" }, 404);
-    await askForMatch([{ profileId, key: "now" }]);
+    const seen = await markIntroductionSeen(getDatabase(), profileId, id.data);
+    if (seen === "missing") return c.json({ error: "Introduction not found" }, 404);
+    if (seen === "changed") await askForMatch([{ profileId, key: "now" }]);
     return c.json({ seen: true });
   });
 
