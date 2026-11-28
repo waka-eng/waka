@@ -472,6 +472,7 @@
   "worldPersonalReadingLoadFailed": "Couldn’t load what’s on your mind.",
   "worldPersonalReadingLoading": "Loading your reading…",
   "worldPersonalReadingNotReady": "Nothing to say yet. Save a few more things.",
+  "worldPhotoSpoken": "A photo",
   "worldPhotoEmpty": "This file is empty.",
   "worldPhotoTooLarge": "This photo is over 25 MB. Choose a smaller copy.",
   "worldPhotoWrongKind": "Use a JPEG, PNG, WebP, GIF, AVIF or HEIC photo.",

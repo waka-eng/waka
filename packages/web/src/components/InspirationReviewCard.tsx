@@ -46,8 +46,9 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
   const photo=item.photoId??null;
   const quoted=item.text||item.attachmentLabel||say('worldSavedWord');
   const words=photo?item.text:quoted;
-  const label=item.attachmentLabel&&(photo?!item.labelIsPhoto:!!item.text)?item.attachmentLabel:null;
-  const spoken=photo&&!item.text&&!label?<span className="sr-only">{item.attachmentLabel||say('worldSavedWord')}</span>:null;
+  /* Beside a picture only a link's title is shown; a file's name never is. */
+  const label=item.attachmentLabel&&(photo?item.labelType==='link':!!item.text)?item.attachmentLabel:null;
+  const spoken=photo?<span className="sr-only">{say('worldPhotoSpoken')}</span>:null;
   const when=dateStamp(new Date(item.createdAt).getTime(),locale);
   async function answer(choice:RelevanceChoice){
     if(saving.current||changed)return false;

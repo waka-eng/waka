@@ -472,6 +472,7 @@
   "worldPersonalReadingLoadFailed": "요즘 드는 생각을 불러오지 못했어요.",
   "worldPersonalReadingLoading": "불러오는 중…",
   "worldPersonalReadingNotReady": "아직 메모에서 뚜렷한 흐름을 찾지 못했어요. 마음에 남는 순간을 조금 더 남겨 보세요.",
+  "worldPhotoSpoken": "사진",
   "worldPhotoEmpty": "빈 파일이에요.",
   "worldPhotoTooLarge": "25MB가 넘는 사진이에요. 더 작은 파일을 골라 주세요.",
   "worldPhotoWrongKind": "JPEG, PNG, WebP, GIF, AVIF, HEIC 사진을 사용해 주세요.",
