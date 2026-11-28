@@ -126,3 +126,17 @@ it('gives a stalled upload a deadline, so the run always finishes', async () => 
   expect(await running).toEqual({ landed: 0, leftOut: 1, capacity: false });
   expect(vi.mocked(uploadToPresignedUrl), 'the stalled upload was not tried once more').toHaveBeenCalledTimes(2);
 });
+
+it('waits a moment before trying a dropped upload again', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  let puts = 0;
+  vi.mocked(uploadToPresignedUrl).mockImplementation(async () => {
+    if (++puts === 1) throw new ApiError({ status: 0, message: 'Network unreachable while uploading attachment' });
+  });
+  const running = run([photo('a.png')]);
+  await vi.advanceTimersByTimeAsync(1_400);
+  expect(puts, 'the retry did not wait').toBe(1);
+  await vi.advanceTimersByTimeAsync(1_200);
+  expect(puts).toBe(2);
+  expect(await running).toEqual({ landed: 1, leftOut: 0, capacity: false });
+});

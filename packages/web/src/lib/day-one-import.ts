@@ -119,6 +119,23 @@ function triedAgain(reason: unknown, stage: Stage): boolean {
   return status === 0 || status === 408 || status === 429 || status >= 500;
 }
 
+/** HOW LONG TO WAIT BEFORE THE ONE RETRY of a failure that may pass (a busy
+    server, a dropped connection): 1.5s and up to a second more, so three
+    workers that failed together do not all come back at once. A bucket 403
+    needs no wait, only a fresh ticket. */
+function pauseBefore(reason: unknown, stage: Stage): number {
+  if (reason instanceof ApiError && stage === 'bucket' && reason.status === 403) return 0;
+  return 1_500 + Math.round(Math.random() * 1_000);
+}
+function waitOut(ms: number, signal: AbortSignal): Promise<void> {
+  if (!ms || signal.aborted) return Promise.resolve();
+  return new Promise(done => {
+    const timer = setTimeout(finish, ms);
+    function finish() { clearTimeout(timer); signal.removeEventListener('abort', finish); done(); }
+    signal.addEventListener('abort', finish, { once: true });
+  });
+}
+
 /** The deadline on one try, presign to save, as `uploadInspirationMedia` sets
     on each transfer: a stalled PUT fails, and the run always finishes. */
 const TRANSFER_DEADLINE_MS = 120_000;
@@ -132,6 +149,7 @@ const TRANSFER_DEADLINE_MS = 120_000;
 async function bringOne(item: Ready, profileId: string, signal: AbortSignal): Promise<ApiInspiration | null> {
   const requestId = crypto.randomUUID();
   let uploaded: { key: string; contentType: string; size: number } | null = null;
+  let pause = 0;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (signal.aborted) return null;
     const transfer = new AbortController();
@@ -158,10 +176,12 @@ async function bringOne(item: Ready, profileId: string, signal: AbortSignal): Pr
       const stop = stopsTheQueue(reason, stage);
       if (stop) throw stop;
       if (signal.aborted || !triedAgain(reason, stage)) return null;
+      pause = attempt === 0 ? pauseBefore(reason, stage) : 0;
     } finally {
       clearTimeout(deadline);
       signal.removeEventListener('abort', abort);
     }
+    await waitOut(pause, signal);
   }
   return null;
 }

@@ -84,7 +84,12 @@ export function HomeBar(props: {
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
       {props.notice ? (
-        <button type="button" className="waka-home-bar-notice" role="status" onClick={props.notice.onDismiss}>{props.notice.text}</button>
+        /* The words are a polite live region; the press over them is named
+           for what it does (final review, 2026-11-27). */
+        <div className="waka-home-bar-notice" aria-live="polite">
+          <span>{props.notice.text}</span>
+          <button type="button" className="waka-home-bar-notice-close" aria-label={say('worldClose')} onClick={props.notice.onDismiss} />
+        </div>
       ) : props.saved ? (
         <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (

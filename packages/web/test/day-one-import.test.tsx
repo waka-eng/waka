@@ -12,7 +12,8 @@
  * WHAT THIS MOCKS, AND WHY (gate G6): through `helpers/render-home`,
  * `lib/data` (an empty archive, no reading), `lib/api` (the boot verbs, and
  * the three upload steps: `presignAttachment`, `uploadToPresignedUrl`,
- * `createInspiration`; `fetchHunch` answers nothing), `lib/auth-context` (a
+ * `createInspiration`; `fetchHunch` answers nothing; `listClaims` asks no
+ * question unless a test gives it one), `lib/auth-context` (a
  * signed-in owner), `lib/inspiration-photo` (the sniffer passes a file
  * through, so the test needs no real image bytes) and the canvas
  * (`helpers/canvas-stub`). The page, the bubble and the queue are the
@@ -22,12 +23,13 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from './helpers/render-home';
-import { createInspiration, fetchHunch, presignAttachment, uploadToPresignedUrl } from '../src/lib/api';
+import { createInspiration, fetchHunch, listClaims, presignAttachment, uploadToPresignedUrl } from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [] as Array<{ id: string; text: string; daysAgo: number }> }));
 vi.mock('../src/lib/data', async original => ({ ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS) }));
 vi.mock('../src/lib/api', async original => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
   fetchHunch: vi.fn(async () => null),
+  listClaims: vi.fn(async () => ({ claims: [], more: false })),
   presignAttachment: vi.fn(async (input: { filename: string }) => ({ profileId: 'profile-viewer', uploadUrl: `https://bucket.test/${input.filename}`,
     key: `uploads/${input.filename}`, expiresAt: new Date(Date.now() + 60_000).toISOString(), headers: { 'Content-Type': 'image/png', 'Content-Length': '8' } })),
   uploadToPresignedUrl: vi.fn(async () => undefined),
@@ -52,6 +54,7 @@ beforeEach(() => {
   vi.mocked(createInspiration).mockClear(); vi.mocked(presignAttachment).mockClear(); vi.mocked(uploadToPresignedUrl).mockClear();
   vi.mocked(uploadToPresignedUrl).mockImplementation(async () => undefined);
   vi.mocked(fetchHunch).mockReset().mockImplementation(async () => null);
+  vi.mocked(listClaims).mockReset().mockImplementation(async () => ({ claims: [], more: false }));
   FACTS.inspirations = [];
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 });
@@ -74,6 +77,7 @@ it('asks a new person once, and Not now is remembered for this profile', async (
   world = await mountWorld(FACTS); await settle();
   expect(bubble()).toContain('Saved things in other apps?');
   expect(act_('Photos') && act_('Files') && act_('Not now'), 'the ask has no Photos, Files and Not now').toBeTruthy();
+  expect(world.container.querySelector('.jar-char-bubble')?.getAttribute('data-invites'), 'a tap on the creature would light the notepad').toBeNull();
   /* One line only (founder: strip descriptive text; Photos and Files already say what comes in). */
   expect(world.container.querySelector('.jar-char-bubble .jar-char-bubble-of'), 'a second line came back under the ask').toBeNull();
   expect(world.container.querySelector('.waka-home-bar-glyph--lit'), 'the bar\'s photo door is not lit beside the ask').not.toBeNull();
@@ -121,7 +125,7 @@ it('tries a failed upload once more, quietly, then leaves it out and says where 
   const kept = vi.mocked(createInspiration).mock.calls.map(([input]) => input.attachments![0]!.type === 'image' && input.attachments![0]!.key);
   expect(kept.sort()).toEqual(['uploads/fine.png', 'uploads/flaky.png']);
   expect(notice(), 'what did not come in was not said').toBe('A few didn’t come in. The photo button can add them again.');
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-notice')!.click()); // the notice stands in the pull's place
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-notice-close')!.click()); // the notice stands in the pull's place
   expect(world.container.querySelector('.waka-home-bar-pull')?.textContent).toContain('2 inspirations');
 });
 
@@ -136,6 +140,11 @@ it('says plainly that none came in, and never that it is reading them', async ()
   expect(vi.mocked(createInspiration)).not.toHaveBeenCalled();
   expect(bubble()).not.toContain('Reading them now');
   expect(notice()).toBe('None of them came in. The photo button can add them again.');
+  const said = world.container.querySelector('.waka-home-bar-notice')!;
+  expect(said.getAttribute('aria-live'), 'the notice is not a polite live region').toBe('polite');
+  const close = said.querySelector('button')!;
+  expect(close.getAttribute('role')).toBeNull();
+  expect(close.getAttribute('aria-label'), 'the press does not say it dismisses').toBe('Close');
 });
 
 it('does not send files to the photo button', async () => {
@@ -155,7 +164,7 @@ it('keeps the notice when a hunch takes the bubble, until it is pressed', async 
   await settle(1000);
   expect(bubble(), 'the hunch did not come').toContain('Am I close?');
   expect(notice(), 'the hunch took the notice away').toBe('A few didn’t come in. The photo button can add them again.');
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-notice')!.click());
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-notice-close')!.click());
   expect(world.container.querySelector('.waka-home-bar-notice')).toBeNull();
 });
 
@@ -178,4 +187,28 @@ it('waits for the first ask for a hunch before asking for imports', async () => 
   expect(bubble(), 'the ask stood before the hunch was asked for').not.toContain('Saved things in other apps?');
   await act(async () => answer(null)); await settle();
   expect(bubble()).toContain('Saved things in other apps?');
+});
+
+/* FINAL REVIEW, 2026-11-27: an account that started empty asked for the hunch
+   once on its first landing, found the job not done yet, and stopped. */
+it('keeps asking for the hunch after an empty account brings its first saves in', async () => {
+  let asked = 0;
+  vi.mocked(fetchHunch).mockImplementation(async () => vi.mocked(createInspiration).mock.calls.length && ++asked > 3
+    ? { id: 'h1', body: 'You keep saving quiet rooms. Am I close?', inspirationIds: [], status: 'pending' as const } : null);
+  world = await mountWorld(FACTS); await settle();
+  await pick('photos', [photo('one.png')]);
+  await settle(400);
+  await settle(2000);
+  expect(bubble(), 'the hunch written after the import never showed').toContain('You keep saving quiet rooms. Am I close?');
+});
+
+it('never stands in front of a pattern the bubble is already asking about', async () => {
+  vi.mocked(listClaims).mockImplementation(async () => ({ more: false, claims: [{
+    id: 'claim-1', statement: 'You keep saving rooms with one big window.', status: 'emerging', confidence: 24, evidenceCount: 1,
+    lastEvidenceAt: '2026-10-01T00:00:00.000Z', locked: false, unsupported: false, sharedGroupIds: [], createdAt: '2026-10-01T00:00:00.000Z',
+    statementRevision: '1', from: [] }] }) as unknown as Awaited<ReturnType<typeof listClaims>>);
+  world = await mountWorld(FACTS); await settle();
+  expect(bubble()).toContain('You keep saving rooms with one big window.');
+  expect(bubble(), 'the ask hid the question').not.toContain('Saved things in other apps?');
+  expect(world.container.querySelector('.waka-home-bar-glyph--lit'), 'the ask stood behind the question').toBeNull();
 });

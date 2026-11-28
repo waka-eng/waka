@@ -2085,7 +2085,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      and the hunch never showed until the next save or a reload). */
   const countSeen = useRef<number | null>(null);
   useEffect(() => {
-    if (!hunchProfile || lead || savedCount === null || savedCount === 0) return;
+    if (!hunchProfile || lead || savedCount === null) return;
+    /* NONE IS A COUNT TOO (final review, 2026-11-27): an account that starts
+       empty must see its first save as growth, or the first save asks for the
+       hunch once, finds the job not done yet, and stops asking. */
+    if (savedCount === 0) { countSeen.current = 0; return; }
     const grew = countSeen.current !== null && savedCount > countSeen.current;
     countSeen.current = savedCount;
     pollHunch(hunchRef.current?.id ?? null, grew || hunchRef.current ? 12 : 1);
@@ -5397,7 +5401,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
        behind them, since the reading is the product and the ask only hurries
        it. With saves to guess from, it also waits for the first ask for a
        hunch to answer, so it never stands for a moment and is then replaced. */
-    !lead && !hunch && (savedCount === 0 || hunchAsked);
+    !lead && !hunch && (savedCount === 0 || hunchAsked) &&
+    /* NOR OVER A QUESTION ALREADY ASKED: a pattern still forming is asked in
+       the bubble ("Yes" / "Not really"), and it is never hidden (final review,
+       2026-11-27). */
+    !claimQueue.some(claim => claim.status === 'emerging');
   /* THE SAME LANDING A SAVE FROM THE NOTEPAD GETS (`onResolved` above):
      known to the details, born on the field, counted, its processing tracked. */
   const landImported = (made: ApiInspiration) => {
@@ -5439,6 +5447,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
       /* NOTHING LANDED: no reading is coming from this, so the bubble goes
          straight back to what it says and does not claim to be reading. */
       setImportRun(landed ? 'reading' : null);
+      /* AND ASK FOR THE HUNCH THE WAY A SAVE DOES, with its retries, however
+         the count's own watcher saw these land. */
+      if (landed && !lead) pollHunch(hunchRef.current?.id ?? null);
       if (landed) importTimers.current.push(window.setTimeout(() => setImportRun(run => run === 'reading' ? null : run), IMPORT_READING_MS));
       if (leftOut) {
         /* SAID PLAINLY, WITH A DOOR THAT WORKS. Photos can go again through
@@ -9798,7 +9809,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    through `charSay`, which is always the lighter weight. */
                 <div
                   className={`jar-char-bubble${(lead && !standingAsAgent) || agentSays ? ' jar-char-bubble--reading' : ''}`}
-                  data-invites={standingAsAgent || agentSays ? undefined : lead ? 'chat' : hunch ? undefined : 'save'}
+                  data-invites={standingAsAgent || agentSays ? undefined : lead ? 'chat' : hunch || importRun || askToImport ? undefined : 'save'}
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */
@@ -10001,12 +10012,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                              import) ═══ A state, never a count. */
                           <span className="jar-char-bubble-reading" role="status">
                             {say(importRun === 'bringing' ? 'worldImportBringing' : 'worldImportReading')}</span>
-                        ) : askToImport ? (
-                          /* ═══ THE ONE TIME ASK (day one import) ═══ Only
-                             while there is no hunch (`askToImport`); asked
-                             once, and any answer gives the bubble back. */
-                          <ImportAsk locale={locale} onOpen={door => (door === 'photos' ? importPhotosRef : importFilesRef).current?.click()}
-                            onNotNow={() => answerImport('not_now')} />
                         ) : hunch && !standingAsAgent ? (
                           /* ═══ A HUNCH (insight goal, phase 3) ═══ See
                              `pollHunch`: asked, then answered in place. */
@@ -10046,6 +10051,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             </span>
                             {answerFailed ? <span className="jar-char-bubble-of" role="alert">{say('worldReviewAnswerFailed')}</span> : null}
                           </>
+                        ) : askToImport ? (
+                          /* ═══ THE ONE TIME ASK (day one import) ═══ After
+                             the hunch and the forming pattern, which it never
+                             stands in front of (`askToImport`); asked once,
+                             and any answer gives the bubble back. */
+                          <ImportAsk locale={locale} onOpen={door => (door === 'photos' ? importPhotosRef : importFilesRef).current?.click()}
+                            onNotNow={() => answerImport('not_now')} />
                         ) : <>
                           <span className="jar-char-bubble-reading">{restingWord}</span>
                           {/* NEVER ON THE AGENT. Founder, 2026-10-15: "you
