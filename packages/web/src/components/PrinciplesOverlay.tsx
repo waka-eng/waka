@@ -1,5 +1,5 @@
 /* The personal list shows the statement. Opening it reveals the supporting evidence. */
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { useNativeBack } from "./SurfaceHeader";
@@ -219,14 +219,12 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
       {/* THE STAR CAME BACK (founder, 2026-11-26, after trying the "<":
           "remove < and bring back the star"). Home's star at the right walks
           here; this one at the left walks home. */}
-      {/* THE ASTERISK, CUT BY THE LEFT EDGE (founder, 2026-11-27, choosing
-          "an asterisk cut by the edge"): home's mark, mirrored, its right
-          three quarters showing, so this one says "home is this way" the way
-          home's says "Principles". */}
+      {/* THE SAME STAR ON THE LEFT walks home, as home's at the right walks
+          here; its sparkles sit on its outer side. */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <PrinciplesAsterisk edge="left" />
+        <PrinciplesAsterisk mirrored />
       </button>}
       <DialogSurface
         className="waka-over"
@@ -346,53 +344,35 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   );
 }
 
-/* ═══ WAKA'S OWN ASTERISK, CUT BY THE EDGE (founder, 2026-11-27, choosing
-   "C. An asterisk cut by the edge" of three) ═══ The four-point spark read as
-   another company's AI button, and a star is a word WAKA retired. The mark
-   is now *, ASCII 42, the wildcard WAKA is named for: six rounded strokes at
-   the weight of the Jost text. A quarter of it is off screen, so it says
-   "more this way" with light alone.
-   The crop is taken from the INK, not the 24-unit box (code review,
-   2026-11-27): the strokes, round caps included, span x 3.79 to 20.21 and
-   y 2.65 to 21.35, so a cut measured on the box fell mostly in empty space
-   and the mark read as whole. The viewBox keeps three quarters of the ink's
-   width, ending mid-way along the two arms that point off screen, and the
-   svg's cut side is laid on the screen's edge, so nothing overflows the
-   page. Home's, at the right edge, shows the left three quarters; Principles'
-   is the same mark mirrored (founder, 2026-11-19: "there should be the same
-   star on the left to go back"): at the left edge it shows the right three
-   quarters, its two left arms cut mid-way past the edge. */
-const INK = { left: 3.79, right: 20.21, top: 2.65, bottom: 21.35 } as const;
-const INK_SHOWN = 0.75 * (INK.right - INK.left);
-const INK_HEIGHT = INK.bottom - INK.top;
-/** The ink is 44px tall, the old spark's peak size within its press. */
-const MARK_PX = 44 / INK_HEIGHT;
-const ASTERISK_VIEW = {
-  right: `${INK.left} ${INK.top} ${INK_SHOWN} ${INK_HEIGHT}`,
-  left: `${INK.right - INK_SHOWN} ${INK.top} ${INK_SHOWN} ${INK_HEIGHT}`,
-} as const;
-/** The one place the stylesheet learns the geometry: the ink's size on
-    screen, and how far in from the cut the asterisk's centre (x 12) sits,
-    which is where its glow is centred. */
-const MARK_GEOMETRY = {
-  "--waka-mark-w": `${(INK_SHOWN * MARK_PX).toFixed(2)}px`,
-  "--waka-mark-h": `${(INK_HEIGHT * MARK_PX).toFixed(2)}px`,
-  "--waka-mark-centre": `${((INK.left + INK_SHOWN - 12) * MARK_PX).toFixed(2)}px`,
-} as CSSProperties;
+/* ═══ THE PRINCIPLES STAR (founder, 2026-11-28, choosing "8. Star with
+   sparkles" of eight, after the cut asterisk was "so ugly and cut off" and
+   the fine rays "ugly") ═══ A plump five-point star with round, soft tips,
+   the same body and ivory light as the creature, with two tiny lights
+   beside it as if it just landed. Lit by one light from above. Whole, set
+   in from the edge where the spark sat; Principles wears the same star on
+   its left to walk home (founder, 2026-11-19: "there should be the same
+   star on the left to go back"), its sparkles mirrored to the outer side. */
+const STAR_POINTS = "12.00,5.30 14.35,9.66 19.23,10.55 15.80,14.14 16.47,19.05 12.00,16.90 7.53,19.05 8.20,14.14 4.77,10.55 9.65,9.66";
 
-/** The asterisk both Principles doors wear, cut by the screen edge it sits
-    on: home's at the right walks to Principles, Principles' at the left
-    walks home. The span around it holds the glow, a pre-blurred light whose
-    opacity alone animates. */
-export function PrinciplesAsterisk({ edge }: { edge: "left" | "right" }): JSX.Element {
+/** The star both Principles doors wear. The span around it holds the
+    glow, a pre-blurred light whose opacity alone animates. */
+export function PrinciplesAsterisk({ mirrored = false }: { mirrored?: boolean }): JSX.Element {
+  const fill = `waka-star-${useId().replace(/:/g, "")}`;
   return (
-    <span className="waka-principles-mark" style={MARK_GEOMETRY}>
-      <svg viewBox={ASTERISK_VIEW[edge]} aria-hidden="true" focusable="false">
-        <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-          <path d="M12 3.5v17" />
-          <path d="M4.64 7.75l14.72 8.5" />
-          <path d="M4.64 16.25l14.72-8.5" />
+    <span className="waka-principles-mark">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={mirrored ? { transform: "scaleX(-1)" } : undefined}>
+        <defs>
+          <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="10.6" r="9">
+            <stop offset="0" stopColor="#fffdf8" />
+            <stop offset="0.6" stopColor="#f2e9d9" />
+            <stop offset="1" stopColor="#c9bfad" />
+          </radialGradient>
+        </defs>
+        <g transform="scale(0.86)" style={{ transformOrigin: "12px 12px" }}>
+          <polygon points={STAR_POINTS} fill={`url(#${fill})`} stroke={`url(#${fill})`} strokeWidth="4.4" strokeLinejoin="round" />
         </g>
+        <circle cx="20.2" cy="3.8" r="1.3" fill="#fffdf8" />
+        <circle cx="22.2" cy="7.6" r="0.7" fill="#f6eedf" opacity="0.75" />
       </svg>
     </span>
   );

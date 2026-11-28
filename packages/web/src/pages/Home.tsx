@@ -9649,12 +9649,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {/* ═══ WAKA'S ASTERISK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE
-              (founder, 2026-11-27, choosing "C. An asterisk cut by the
-              edge"; it was a four-point spark from 2026-11-12) ═══
-              Principles lie to the right. The asterisk is cut by the screen's
-              edge, so it says "more this way" with light alone: no arrow and
-              no word (2026-11-20: "I don't want to say principles there").
+          {/* ═══ WAKA'S ASTERISK AT THE RIGHT, LEVEL WITH THE CREATURE
+              (founder, 2026-11-28: whole and soft, the cut one was "so ugly
+              and cut off"; a four-point spark from 2026-11-12) ═══
+              Principles lie to the right, said with light alone: no arrow
+              and no word (2026-11-20: "I don't want to say principles there").
               A press walks there, the same walk the creature's drag takes.
               Always there on your own home (founder, 2026-11-19: "yes always
               shown"); with no principle yet, the walk ends on the page that
@@ -9667,8 +9666,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
               {/* A line about principles makes the asterisk flare. */}
               {beckonLit.to === 'star' && beckonLit.n && Date.now() - beckonLit.at < 1700
-                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesAsterisk edge="right" /></span>
-                : <PrinciplesAsterisk edge="right" />}
+                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesAsterisk /></span>
+                : <PrinciplesAsterisk />}
             </button>
           ) : null}
           {/* ═══ WHAT WAS BROUGHT IN RISES INTO THE CREATURE (day one
