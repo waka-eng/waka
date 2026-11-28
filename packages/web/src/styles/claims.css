@@ -8547,9 +8547,9 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 
 @layer chrome {
 /* ═══ THE STAR THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-28,
-   choosing "8. Star with sparkles"; a cut asterisk the day before, a
-   four-point spark from 2026-11-12) ═══ A plump star of the creature's
-   light with two tiny lights beside it, set in from the edge where the spark sat, on the
+   choosing "8. Star with sparkles", then "i like star without the dots"; a
+   cut asterisk the day before, a four-point spark from 2026-11-12) ═══ A
+   plump star of the creature's light, set in from the edge where the spark sat, on the
    creature's own line (`--jar-char-mid`, the same value the creature's
    press sits on). The same mark sits on Principles' left and walks home.
    The 44px press holds the whole mark, so the mark is what takes the tap. */
@@ -8579,7 +8579,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   width: var(--waka-corner); height: var(--waka-corner);
 }
 .waka-principles-mark svg {
-  position: relative; display: block; width: 34px; height: 34px;
+  position: relative; display: block; width: 30px; height: 30px;
   animation: waka-spark-glint 3.6s ease-in-out infinite;
 }
 .waka-principles-mark::before {
