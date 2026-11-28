@@ -5677,13 +5677,23 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-connect-step-title { color: var(--ink); font-size: var(--t-ui); line-height: 1.45; }
 .waka-connect-allow { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); font-size: var(--t-ui); cursor: pointer; }
 .waka-connect-tool .waka-connect-button {
-  min-height: 40px; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  min-height: var(--waka-corner); padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font: inherit; font-size: var(--t-ui); cursor: pointer;
 }
 .waka-connect-tool .waka-connect-button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
 .waka-connect-tool .waka-connect-button:disabled { opacity: .5; cursor: default; }
-.waka-connect-tool .waka-connect-button.waka-connect-button--quiet { background: none; padding: 0; min-height: 36px; color: var(--muted); }
+.waka-connect-tool .waka-connect-button.waka-connect-button--quiet { background: none; padding: 0; min-height: var(--waka-corner); color: var(--muted); }
 .waka-connect-tool .waka-connect-button.waka-connect-button--quiet:is(:hover, :focus-visible) { background: none; color: var(--ink); }
+/* THE CANCEL WITH NO PADDING (founder, 2026-11-27: "i just saw a cancel
+   button with like 0 paddings lol"). Disconnect's Cancel is the pair's last
+   child, so `.waka-session-actions > button:last-child` (0,2,1) drew the
+   answering act's 1px pill round it while `--quiet` took its padding to 0:
+   an outline touching the letters, 36 tall beside a 40 tall pill. A quiet
+   word is never edged; it keeps the text button's 12 in and the 44 floor,
+   and every pill in a tool card stands at the 44 the rest of the card does. */
+.waka-connect-tool .waka-session-actions > .waka-connect-button.waka-connect-button--quiet {
+  padding-inline: var(--sp-12); border: 0; border-radius: var(--r-pill);
+}
 .waka-connect-connected { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); padding: 0 var(--sp-14) var(--sp-14) calc(var(--sp-14) + 8px + var(--sp-12)); }
 .waka-connect-reads { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--t-ui); color: var(--ink); }
 .waka-connect-reads > li { display: flex; justify-content: space-between; gap: var(--sp-12); }
@@ -5701,7 +5711,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-connect-tool :is(.waka-connect-steps, .waka-connect-connected) .waka-settings-note { margin: 0; color: var(--muted); font-size: var(--t-meta); line-height: 1.45; }
 .waka-connect-tool .waka-settings-erase {
-  min-height: 40px; margin: 0; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  min-height: var(--waka-corner); margin: 0; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font-size: var(--t-ui);
 }
 .waka-connect-tool .waka-settings-erase:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
@@ -6162,6 +6172,30 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    same layer, underlined inside its own edge). Named at (0,2,0) to win. */
 .waka-settings-erase[type="submit"],
 .waka-home-bar-answer-send[type="submit"] { text-decoration: none; }
+
+/* ═══ ONE BUTTON, ONE SHAPE (founder, 2026-11-27: "audit for like spacing
+   and alignment and stuff to make it look 'polished' for all buttons,
+   states, etc. for example i just saw a cancel button with like 0 paddings
+   lol") ═══ The card's house standard, measured off its own majority at 390
+   and 1280:
+     - THE ANSWERING ACT is the edged pill: 44 tall, 16 in, a 1px edge.
+     - A QUIET WORD is 44 tall with no ground, ever; it answers the hand in
+       light (muted to ink). Where it starts a row it stands on the text
+       column, inline padding 0, as Sign out and the foot already do.
+     - A pair is 8 apart, Cancel on the left, the act on the right.
+   Outliers, each measured before:
+     - Change password stood 35 tall (chrome.css's submit `padding: 7px`,
+       `min-height: 32px` at (0,1,1) beat this class's 44). (0,2,0) here.
+     - Cancel in every confirm pair stood 14px in from the words above it.
+     - `.waka-account button:hover` (0,2,1) laid a square 8% ground on the
+       zero-padding words (Refresh, Sign out everywhere else, each row's
+       Disconnect, Cancel): a box hugging the letters. */
+.waka-settings-erase[type="submit"] { min-height: var(--waka-corner); padding-block: 0; }
+.waka-session-actions > .waka-settings-erase:first-child:not(:last-child) { padding-inline: 0; border-radius: 0; }
+.waka-account :is(.waka-settings-section, .waka-session-foot, .waka-session-line) > .waka-settings-erase:is(:hover, :focus-visible),
+.waka-account .waka-session-actions > .waka-settings-erase:first-child:not(:last-child):is(:hover, :focus-visible) {
+  background: none;
+}
 
 /* NO RED. "Colour temperature means aliveness and is not spent on
    warnings" — this file's own rule. What marks the destructive pair is
@@ -6793,6 +6827,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     flex-direction: column;
     align-items: stretch;
   }
+  /* Under the words, Bring back's own 8px stood its word 8px right of the
+     line it restores (MEASURED 2026-11-27 at 390: words x 16, verb x 24).
+     The hit box keeps its 8; the word moves onto the edge. Asking, the
+     question leads the row and already stands there. */
+  .waka-shelf-acts > .waka-shelf-back:first-child { margin-inline-start: calc(-1 * var(--sp-8)); }
 }
 
 /* "Deleted. Undo" — the one line of state the list shows, held at the foot
@@ -7945,6 +7984,9 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
   }
   .jar-note-actions > .jar-draft-menu > .waka-add-row {
     min-height: 56px; justify-content: center; font-size: var(--t-input);
+    /* The sheet rounds its own corners; a row's 12px radius bent the
+       divider above Delete into a cup at both ends (2026-11-27 polish). */
+    border-radius: 0;
   }
   .jar-note-actions > .jar-draft-menu > .waka-add-row + .waka-add-row { border-top: 1px solid var(--line); }
 }
