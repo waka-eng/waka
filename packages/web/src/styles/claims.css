@@ -2216,17 +2216,20 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   position: relative;
   z-index: 1;
 }
-/* THE STAR'S LANE STAYS CLEAR (code review, 2026-11-19). The home star is
-   20px in and 44px wide on the window's left edge; the column starts at the
-   page's 16px phone gutter or, on a wide window, where the 650px measure
-   centres. MEASURED in Chromium: at 390 the star spans 20 to 64 and this
-   puts the words at 70. At 1280 it stays 24.
-   Its padding is whatever keeps the words 6px past the star, never under
+/* THE HOME MARK'S LANE STAYS CLEAR (code review, 2026-11-19; geometry
+   2026-11-27). The home press is 44px wide flush on the window's left edge
+   (or its safe-area line) and holds all of the asterisk's ink, so the lane
+   is 0 to 44. The column starts at the page's 16px phone gutter or, on a
+   wide window, where the 650px measure centres. MEASURED in Chromium
+   (2026-11-27): at 390 the press spans 0 to 44, the asterisk's ink 0 to 29,
+   and this padding is 34, putting the words at 50. At 1280 the column
+   starts at 315 and its padding stays 24, putting the words at 339.
+   Its padding is whatever keeps the words 6px past the press, never under
    the usual 24px, on both sides so the column stays centred. */
 /* Two classes on the page, so it outranks the phone's one-gutter rule
    (`.waka-over:not(.waka-over--note)`, later in this layer). */
 .waka-page.waka-page--timeless .waka-over {
-  padding-inline: max(var(--sp-24), calc(max(var(--sp-20), env(safe-area-inset-left)) + var(--sp-6) + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
+  padding-inline: max(var(--sp-24), calc(env(safe-area-inset-left, 0px) + var(--waka-corner) + var(--sp-6) - max(var(--sp-16), (100vw - 650px) / 2)));
 }
 
 /* ═══ THE GROUND, BEFORE THE FIRST PRINCIPLE ═════════════════════════════
@@ -8367,49 +8370,127 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 
 @layer chrome {
-/* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
-   At the right edge on the creature's own line (`--jar-char-mid`, the same
-   value the creature's press sits on), a 44px press holding one
-   four-point spark, 40px since the founder asked for it bigger (2026-11-20),
-   sized here for both edges so the two stars cannot drift apart. It rests dim and glints every few seconds: light is the
-   only meaning channel, so the hint is a light, not an arrow or a word. */
+/* ═══ THE ASTERISK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder,
+   2026-11-27, choosing "C. An asterisk cut by the edge"; a four-point spark
+   from 2026-11-12) ═══ WAKA's own *, cut by the screen's edge so a quarter
+   of it is off screen: it says "more this way" with light alone, no arrow
+   and no word. On home it sits at the right edge on the creature's own line
+   (`--jar-char-mid`, the same value the creature's press sits on); the same
+   mark, mirrored, sits on Principles' left edge and walks home.
+
+   THE MARK TAKES THE TAP (code review, 2026-11-27). The 44px press runs
+   from the cut, at the screen's edge or its safe-area line, 44px in, so
+   the asterisk's centre and all of its ink are inside it. A mark that does
+   not answer a tap is worse than the edge's gestures: iOS has no right-edge
+   system gesture, and the app's WKWebView has no left-edge back swipe. */
 .waka-principles-spark {
   position: absolute; z-index: 3;
-  right: max(var(--sp-20), env(safe-area-inset-right));
+  right: env(safe-area-inset-right, 0px);
   top: var(--jar-char-mid, 50%); transform: translateY(-50%);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: flex-end;
   width: var(--waka-corner); height: var(--waka-corner); padding: 0;
-  border: 0; border-radius: 50%; background: none; color: var(--jar-live);
+  border: 0; border-radius: var(--radius-sm); background: none; color: var(--jar-live);
   cursor: pointer; pointer-events: auto;
 }
-/* The same star on Principles' left edge walks home (founder, 2026-11-19).
-   Fixed on the window; its z-index ranks it inside the page's own stacking
-   context (`.waka-page` is fixed at z 56), over the page's other children. */
+/* Principles' mark walks home (founder, 2026-11-19: "there should be the
+   same star on the left to go back"). Fixed on the window; its z-index
+   ranks it inside the page's own stacking context (`.waka-page` is fixed at
+   z 56), over the page's other children. */
 .waka-principles-spark--home {
   position: fixed; z-index: 57; top: 50%;
-  right: auto; left: max(var(--sp-20), env(safe-area-inset-left));
+  right: auto; left: env(safe-area-inset-left, 0px);
+  justify-content: flex-start;
 }
-.waka-principles-spark svg { width: 40px; height: 40px; animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+/* The mark and its glow. The ink's size and the glow's centre come from
+   PrinciplesAsterisk's INK constants, set on this span as `--waka-mark-w`,
+   `--waka-mark-h` and `--waka-mark-centre`, so the stylesheet cannot drift
+   from the geometry. The svg's cut lies on the press's outer side. The box
+   around it reaches 16px further in and 12px up and down so the glow fades
+   out before the box clips it, and past a safe-area inset to the physical
+   edge, so on a notched phone the glow runs on past the cut instead of
+   stopping in mid-air; the ink still ends at the safe-area line. The box
+   takes no presses; the press is the button. */
+.waka-principles-spark-beckon, .waka-principles-mark { display: flex; flex: none; pointer-events: none; }
+.waka-principles-mark {
+  position: relative; align-items: center; justify-content: flex-end; overflow: hidden;
+  padding-block: var(--sp-12);
+  padding-inline: var(--sp-16) env(safe-area-inset-right, 0px);
+  margin-inline-end: calc(-1 * env(safe-area-inset-right, 0px));
+}
+.waka-principles-spark--home .waka-principles-mark {
+  justify-content: flex-start;
+  padding-inline: env(safe-area-inset-left, 0px) var(--sp-16);
+  margin-inline: calc(-1 * env(safe-area-inset-left, 0px)) 0;
+}
+.waka-principles-mark svg {
+  position: relative; display: block; width: var(--waka-mark-w); height: var(--waka-mark-h);
+  animation: waka-spark-glint 3.6s ease-in-out infinite;
+}
+/* The glow is light drawn once, a soft disc on the asterisk's centre; only
+   its opacity moves, so the idle glint never repaints. */
+.waka-principles-mark { --waka-mark-glow-x: calc(100% - env(safe-area-inset-right, 0px) - var(--waka-mark-centre)); }
+.waka-principles-spark--home .waka-principles-mark { --waka-mark-glow-x: calc(env(safe-area-inset-left, 0px) + var(--waka-mark-centre)); }
+.waka-principles-mark::before {
+  content: ""; position: absolute; inset: 0; opacity: 0; will-change: opacity;
+  background: radial-gradient(circle 22px at var(--waka-mark-glow-x) 50%, color-mix(in srgb, var(--jar-live) 55%, transparent), transparent);
+  animation: waka-spark-glow 3.6s ease-in-out infinite;
+}
+/* Always shown, brighter at rest (founder, 2026-11-19: "yes always shown"):
+   the mark rests at 0.55 and lights every few seconds on the spark's old
+   3.6s beat. Light only: a cut mark cannot turn or swell without its cut
+   leaving the edge. */
 @keyframes waka-spark-glint {
-  0%, 70%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0deg); }
-  80% { opacity: 1; transform: scale(1.15) rotate(20deg); }
-  90% { opacity: 0.6; transform: scale(0.9) rotate(35deg); }
+  0%, 70%, 100% { opacity: 0.55; }
+  80% { opacity: 1; }
+  90% { opacity: 0.65; }
 }
-/* A line about principles: the star swells and flares, twice, then rests. */
-.waka-principles-spark-beckon { display: flex; animation: waka-spark-beckon 1.6s ease-out both; }
+@keyframes waka-spark-glow {
+  0%, 70%, 100% { opacity: 0; }
+  80% { opacity: 1; }
+  90% { opacity: 0; }
+}
+/* A line about principles: the asterisk flares, twice, then rests. */
 .waka-principles-spark-beckon svg { animation: none; opacity: 1; }
+.waka-principles-spark-beckon .waka-principles-mark::before { animation: waka-spark-beckon 1.6s ease-out both; }
 @keyframes waka-spark-beckon {
-  0% { transform: scale(1); filter: none; }
-  20% { transform: scale(1.55) rotate(25deg); filter: drop-shadow(0 0 10px var(--jar-live)) brightness(1.4); }
-  45% { transform: scale(1.2) rotate(40deg); filter: drop-shadow(0 0 4px var(--jar-live)); }
-  65% { transform: scale(1.45) rotate(60deg); filter: drop-shadow(0 0 9px var(--jar-live)) brightness(1.3); }
-  100% { transform: scale(1) rotate(90deg); filter: none; }
+  0%, 100% { opacity: 0; }
+  20% { opacity: 1; }
+  45% { opacity: 0.4; }
+  65% { opacity: 0.9; }
 }
-.waka-principles-spark:hover svg, .waka-principles-spark:focus-visible svg { animation-play-state: paused; opacity: 1; transform: scale(1); }
-.waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
+/* Under a pointer or the keyboard the mark and its glow hold full light.
+   Hover only where a pointer can hover: a tap on iOS leaves :hover stuck
+   (code review, 2026-11-27). */
+.waka-principles-spark:focus-visible .waka-principles-mark svg,
+.waka-principles-spark:focus-visible .waka-principles-mark::before { animation: none; opacity: 1; }
+@media (hover: hover) {
+  .waka-principles-spark:hover .waka-principles-mark svg,
+  .waka-principles-spark:hover .waka-principles-mark::before { animation: none; opacity: 1; }
+}
+/* The ring frames the ink rather than scoring it (code review,
+   2026-11-27): the ink runs the press's full height, so any ring inside
+   the press crosses it. The ring stands 4px outside the press above,
+   below and on its inner side, and is open on the edge side, where the
+   screen already frames it. */
+.waka-principles-spark:focus-visible { outline: none; }
+.waka-principles-spark:focus-visible::after {
+  content: ""; position: absolute; pointer-events: none;
+  inset: calc(-1 * var(--sp-4)) 0 calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4));
+  border: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent);
+  border-inline-end: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.waka-principles-spark--home:focus-visible::after {
+  inset: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) 0;
+  border-inline-end: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); border-inline-start: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
 @media (prefers-reduced-motion: reduce) {
-  .waka-principles-spark svg { animation: none; opacity: 0.6; }
-  .waka-principles-spark-beckon { animation: none; }
+  .waka-principles-mark svg { animation: none; opacity: 0.6; }
+  .waka-principles-mark::before { animation: none; }
+  /* The beckon still answers, still: full light, no motion. Its selectors
+     outrank the rest rules above. */
+  .waka-principles-spark-beckon .waka-principles-mark svg,
+  .waka-principles-spark-beckon .waka-principles-mark::before { animation: none; opacity: 1; }
 }
 }
 

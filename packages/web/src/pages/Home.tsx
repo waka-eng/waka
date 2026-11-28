@@ -135,7 +135,7 @@ import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
 import { bubbleStayMs } from "../lib/kept-bubble";
-import { PrinciplesOverlay, PrinciplesSpark } from "../components/PrinciplesOverlay";
+import { PrinciplesOverlay, PrinciplesAsterisk } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
 import { listInspirationReviews } from "../lib/api";
@@ -3361,6 +3361,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const later = window.setTimeout(look, 350);
     return () => { cancelAnimationFrame(frame); window.clearTimeout(later); };
   }, [barBeckon]);
+  /* THE BECKON ENDS ON ITS OWN (code review, 2026-11-27). Whether it shows
+     was only re-checked on a render, so with nothing else rendering the
+     flare's wrapper stayed mounted: the asterisk held full light and never
+     glinted again, and under reduced motion its glow stayed lit. Once the
+     1.7s window closes, a render lets the light return to rest. */
+  useEffect(() => {
+    if (!beckonLit.n || !beckonLit.at) return undefined;
+    const n = beckonLit.n;
+    const timer = window.setTimeout(() => setBeckonLit(b => (b.n === n ? { ...b, at: 0 } : b)), Math.max(0, 1700 - (Date.now() - beckonLit.at)));
+    return () => window.clearTimeout(timer);
+  }, [beckonLit.n, beckonLit.at]);
   const creatureSpeaksRef = useRef(creatureSpeaks);
   creatureSpeaksRef.current = creatureSpeaks;
 
@@ -9497,24 +9508,23 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {/* ═══ A SPARK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE (founder,
-              2026-11-12, choosing "A spark" of six) ═══ Principles lie to the
-              right, and nothing on home said so. One four-point spark
-              rests dim at the edge and glints every few seconds; a press
-              walks there, the same walk the creature's drag takes. Light
-              only, no arrow and no word. Always there on your own home
-              (founder, 2026-11-19: "yes always shown"); with no principle
-              yet, the walk ends on the page that says how they come. The
-              founder kept this spark over an asterisk with a name under it
-              (2026-11-20: "I like the old star design, I don't want to say
-              principles there"). */}
+          {/* ═══ WAKA'S ASTERISK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE
+              (founder, 2026-11-27, choosing "C. An asterisk cut by the
+              edge"; it was a four-point spark from 2026-11-12) ═══
+              Principles lie to the right. The asterisk is cut by the screen's
+              edge, so it says "more this way" with light alone: no arrow and
+              no word (2026-11-20: "I don't want to say principles there").
+              A press walks there, the same walk the creature's drag takes.
+              Always there on your own home (founder, 2026-11-19: "yes always
+              shown"); with no principle yet, the walk ends on the page that
+              says how they come. */}
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              {/* A line about principles makes the star swell and flare. */}
+              {/* A line about principles makes the asterisk flare. */}
               {beckonLit.to === 'star' && beckonLit.n && Date.now() - beckonLit.at < 1700
-                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesSpark /></span>
-                : <PrinciplesSpark />}
+                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesAsterisk edge="right" /></span>
+                : <PrinciplesAsterisk edge="right" />}
             </button>
           ) : null}
           {/* Taps change the invitation on this profile; dragging right
