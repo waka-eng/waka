@@ -23,6 +23,8 @@ import { effectiveAttachmentStatus, effectiveAttachmentText } from '../lib/attac
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
 import {readConversationOrigin} from '../lib/conversation-capture.js';
 import {
+  imageReadLine,
+  READ_LINE_SOURCE_CHARS,
   attachmentLabel,
   inspirationSelection,
   MAX_SUMMARY_ATTACHMENTS,
@@ -267,6 +269,13 @@ export function registerRecallRoutes(
                 title: attachments.title,
                 hostname: attachments.hostname,
                 url: attachments.url,
+                /* A PICTURE'S FIRST READ LINE (founder, 2026-11-27, of rows
+                   that were only "#8 Oct 27" beside a thumbnail): the row
+                   leads with it. Clipped in Postgres, enough for a line;
+                   the whole of the words never rides on a list. */
+                enrichmentStatus: attachments.enrichmentStatus,
+                wordsSource: sql<string | null>`left(${attachments.enrichmentText}, ${sql.raw(String(READ_LINE_SOURCE_CHARS))})`,
+                correction: sql<string | null>`left(${attachments.transcriptCorrection}, ${sql.raw(String(READ_LINE_SOURCE_CHARS))})`,
               })
               .from(attachments)
               .where(
@@ -300,10 +309,12 @@ export function registerRecallRoutes(
       if (!inspirationId) continue; // filtered by inArray above; narrows the 0076 nullable
       const bucket = summaryByInspiration.get(inspirationId) ?? [];
       if (bucket.length >= MAX_SUMMARY_ATTACHMENTS) continue;
+      const readLine = attachment.type === "image" ? imageReadLine(attachment) : null;
       bucket.push({
         id: attachment.id,
         type: attachment.type,
         label: attachmentLabel(attachment),
+        ...(readLine ? { readLine } : {}),
       });
       summaryByInspiration.set(inspirationId, bucket);
     }

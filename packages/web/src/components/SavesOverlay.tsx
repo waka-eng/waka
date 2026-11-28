@@ -40,16 +40,18 @@
  * itself — the grid is for finding the thing, not for reading it.
  */
 import { InspirationRelevanceControl } from "./InspirationRelevanceControl";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { SurfaceHeader, useNativeBack, type BackKind } from "./SurfaceHeader";
-import { firstPhoto, onlyAttachments, SavedPhoto } from "./SavedPhoto";
+import { firstPhoto, onlyAttachments, readLine, SavedPhoto } from "./SavedPhoto";
 import { prefersStillness } from "../lib/motion";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
 import { SavedImageWords } from "./ImageWords";
+import { NotePicture } from "./NotePicture";
+import { downloadOriginal } from "../lib/picture-download";
 import { NOTE_ACTIONS_SLOT, NoteTools } from "./NoteTools";
 import {
   ApiError,
@@ -854,6 +856,19 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   const attaching = Boolean(open) && (attachingFor === open?.id
     || (open ? recorder.isSending(open.id, profileId ?? null) : false));
   const attachFailed = Boolean(open) && attachFailedFor === open?.id;
+  /* THE ORIGINAL'S DOWNLOAD, from the ⋯ (`lib/picture-download.ts`). Its
+     failure is said in the bar with every other, and only on its own note. */
+  const [downloadFailedFor, setDownloadFailedFor] = useState<string | null>(null);
+  const downloadFailed = Boolean(open) && downloadFailedFor === open?.id;
+  const openPictures = open?.attachments.filter(item => item.type === "image") ?? [];
+  const downloadPictures = useCallback(async (note: Inspiration) => {
+    setDownloadFailedFor(null);
+    try {
+      for (const item of note.attachments.filter(each => each.type === "image")) await downloadOriginal(item.id, item.label);
+    } catch {
+      setDownloadFailedFor(note.id);
+    }
+  }, []);
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
@@ -1621,14 +1636,21 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
               owner={ownerName}
             >
               {canReview&&profileId&&loaded?<InspirationRelevanceControl key={open.id} id={open.id} profileId={profileId} locale={locale} onChanged={onRelevanceChanged}/>:null}
-              <InspirationAttachments items={open.attachments.filter(item => item.type !== "link")} locale={locale} quiet />
-              {/* "THE WORDS I READ" (design E3/E3′): read off a saved image by
-                  the server after the save, so this page is where they land —
-                  quoted with Fix, or "Which line stuck?" when it could not
-                  read them. The server says who may edit (`canEdit`). */}
+              {/* ═══ THE PICTURE IS THE PAGE (founder, 2026-11-27, approving
+                  the picture-saves board) ═══ Each picture at the column's
+                  full width, trimmed of the other phone, a tap to see it
+                  whole (`NotePicture`); under it, "THE WORDS I READ" (design
+                  E3/E3′), read off it by the server after the save and quoted
+                  with Fix. The server says who may edit (`canEdit`). A
+                  picture with no readable words stands alone, and nothing is
+                  said about it. */}
               {open.attachments.filter(item => item.type === "image").map(item => (
-                <SavedImageWords key={item.id} attachmentId={item.id} locale={locale} inline={item.words} />
+                <Fragment key={item.id}>
+                  <NotePicture id={item.id} label={item.label} locale={locale} />
+                  <SavedImageWords attachmentId={item.id} locale={locale} inline={item.words} />
+                </Fragment>
               ))}
+              <InspirationAttachments items={open.attachments.filter(item => item.type !== "link" && item.type !== "image")} locale={locale} quiet />
 
               {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the
                   same blank-page treatment the notepad gives a new one, so a
@@ -1686,7 +1708,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
           /* the notepad's recorder is running under this page: one
              microphone at a time */
           recordDisabled={recorder.blocked}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : downloadFailed ? say("worldPictureDownloadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
           /* STRIPPED: the idle "Saved" status; only a change in progress
              or unsaved speaks. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
           status={saving ? say("worldSaving") : loaded && draft.trim() !== stored?.text?.trim() ? say("worldDraftWord") : ""}
@@ -1735,6 +1757,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
              in full, never the list's cut of them. */
           shareLabel={loaded && draft.trim() ? say("worldShareInspirationTitle") : undefined}
           onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim(), capturedMs: open.capturedMs, attachments: open.attachments }))}
+          /* The original of each picture it holds, untrimmed. */
+          downloadLabel={openPictures.length ? say("worldPictureDownload") : undefined}
+          onDownload={() => { void downloadPictures(open); }}
           onFile={(file, door) => void attach(file, door)}
             />
           </article>
@@ -1864,17 +1889,21 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                     const lead = (breakAt > 0 ? words.slice(0, breakAt) : words).trim();
                     const rest = (breakAt > 0 ? words.slice(breakAt + 1) : "").trim();
                     /* A PICTURE SHOWS AS THE PICTURE (founder, 2026-11-12:
-                       rows reading "Photo", "Photo", "Photo"). Its first
-                       picture sits at the row's end; a save that is only
-                       pictures has no lead line to print, and its name stays
-                       for a screen reader. */
+                       rows reading "Photo", "Photo", "Photo"). */
+                    /* ═══ AND THE ROW LEADS WITH IT (founder, 2026-11-27,
+                       approving "Inspirations, led by pictures") ═══ The
+                       picture stands at the row's start, tall enough to
+                       recognise, and a save that is only pictures leads with
+                       the first line read from it, never an empty row. With
+                       no readable words it is the picture and the date and
+                       nothing else: no scene description. Its name stays for
+                       a screen reader. No grid: that tile wall was not
+                       approved. */
                     const photo = firstPhoto(row.attachments);
                     const wordless = onlyAttachments(row.preview, row.attachments);
-                    return (
-                      <li key={row.id}>
-                        <button type="button" className="waka-list-row"
-                          onClick={() => pressNote(row)}>
-                          {wordless ? <span className="sr-only">{lead}</span> : <span className="waka-list-lead">{lead}</span>}
+                    const shown = wordless ? readLine(row.attachments) : lead;
+                    const body = <>
+                          {shown ? <span className="waka-list-lead">{shown}</span> : <span className="sr-only">{lead}</span>}
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
                                 A MEASUREMENT. Founder, on the reference's
@@ -1908,7 +1937,15 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                             <span className="waka-list-date">{dateWords(row.capturedMs, now, locale)}</span>
                             {rest ? <span className="waka-list-rest">{rest}</span> : null}
                           </span>
-                          {photo ? <SavedPhoto id={photo} className="waka-list-photo" /> : null}
+                    </>;
+                    return (
+                      <li key={row.id}>
+                        <button type="button" className="waka-list-row"
+                          onClick={() => pressNote(row)}>
+                          {photo ? <>
+                            <SavedPhoto id={photo} className="waka-list-photo" />
+                            <span className="waka-list-words">{body}</span>
+                          </> : body}
                         </button>
                       </li>
                     );

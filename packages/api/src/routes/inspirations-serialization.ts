@@ -22,6 +22,7 @@
 
 import { inspirations, reflections, type Inspiration, type Reflection } from "../db/index.js";
 import type { serializeAttachment } from "./attachments.js";
+import { readImageWords } from "../lib/image-description.js";
 
 const PREVIEW_CHARS = 220;
 /** Read a little more than the preview needs so collapsing cannot under-fill it. */
@@ -131,7 +132,34 @@ export type AttachmentSummaryEntry = {
   id: string;
   type: string;
   label: string;
+  /** A picture's first line of the words read from it (the owner's fix
+      first). Absent when it has none, so a wordless picture says nothing. */
+  readLine?: string;
 };
+
+/** Enough of a description for its first line; the rest stays in the row. */
+export const READ_LINE_SOURCE_CHARS = 600;
+const MAX_READ_LINE_CHARS = 160;
+
+/**
+ * ═══ A PICTURE SAVE LEADS WITH ITS FIRST READ LINE (founder, 2026-11-27,
+ * approving "Inspirations, led by pictures") ═══════════════════════════════
+ * The same words the page quotes under the picture (`imageWordsState`): the
+ * owner's fix when there is one, else the machine's words, and only once the
+ * reading is ready. The first non-empty line of them, clipped. `null` when
+ * the picture has no readable words: the row then shows the picture and the
+ * date, and NO scene description ("scenes as text" was not approved).
+ */
+export function imageReadLine(row: {
+  enrichmentStatus: string | null;
+  wordsSource: string | null;
+  correction: string | null;
+}): string | null {
+  const words = row.correction ?? (row.enrichmentStatus === "ready" ? readImageWords(row.wordsSource) ?? null : null);
+  const line = words?.split(/\r?\n/).map((part) => part.trim()).find(Boolean);
+  if (!line) return null;
+  return line.length > MAX_READ_LINE_CHARS ? `${line.slice(0, MAX_READ_LINE_CHARS - 1).trimEnd()}…` : line;
+}
 
 /** One capture in a list: enough to recognize it, and never its full text. */
 export function serializeInspirationSummary(

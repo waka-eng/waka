@@ -168,6 +168,9 @@ export interface ApiAttachmentSummary {
       (`enrichment.words`), so the screen need not ask again; absent on a
       list row, which carries no enrichment. */
   words?: ApiImageWordsSummary | null;
+  /** A picture's first line of the words read from it, on a list row (the
+      owner's fix first); absent when it has none. Never a scene description. */
+  readLine?: string;
   /** Original link remains usable if preview metadata is temporarily unavailable. */
   url?: string;
 }

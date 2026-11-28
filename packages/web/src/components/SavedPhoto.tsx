@@ -17,6 +17,12 @@ export function firstPhoto(attachments: readonly ApiAttachmentSummary[]): string
   return attachments.find(item => item.type === 'image')?.id ?? null;
 }
 
+/** The first line read off a save's first picture that has words, when the
+    list carried one (`readLine` on the summary, founder 2026-11-27). */
+export function readLine(attachments: readonly ApiAttachmentSummary[]): string | null {
+  return attachments.find(item => item.type === 'image' && item.readLine?.trim())?.readLine?.trim() ?? null;
+}
+
 /** True when a save's preview is only the name of what is attached ("Photo",
     "2 photos"): there are no words of the person's to quote. */
 export function onlyAttachments(preview: string, attachments: readonly ApiAttachmentSummary[]): boolean {

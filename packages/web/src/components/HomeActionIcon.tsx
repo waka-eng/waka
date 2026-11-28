@@ -87,7 +87,7 @@
    an act, so it is the plainest mark there is; `file` is a page with its
    corner folded — the shape both phone systems use for "a document" — and
    it stands beside a name on every tile, so it never has to carry one. */
-export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'write'|'bubble'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share'|'more'|'edit';className?:string}){
+export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'write'|'bubble'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share'|'download'|'more'|'edit';className?:string}){
   return <svg className={className} data-home-action-icon={kind} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {kind==='capture'?<><path className="jar-spark-core" d="m12 5 1.8 5.2L19 12l-5.2 1.8L12 19l-1.8-5.2L5 12l5.2-1.8z" fill="currentColor" strokeWidth=".8"/>
         <g className="jar-spark-rays" strokeWidth="1.4"><path d="m3 3 2 2m14 14 2 2M3 21l2-2M19 5l2-2"/></g></>
@@ -96,6 +96,9 @@ export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'w
       :kind==='send'?<path d="M4.5 12h14m0 0-5.5-5.5M18.5 12 13 17.5" fill="none" stroke="currentColor" strokeWidth="1.9"/>
       :kind==='stop'?<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>
       :kind==='share'?<><path d="M12 14.2V4.4"/><path d="m8.6 7.6 3.4-3.4 3.4 3.4"/><path d="M7.5 10.5H6.2a1.4 1.4 0 0 0-1.4 1.4v6.4a1.4 1.4 0 0 0 1.4 1.4h11.6a1.4 1.4 0 0 0 1.4-1.4v-6.4a1.4 1.4 0 0 0-1.4-1.4h-1.3"/></>
+      /* `download` ARRIVED 2026-11-27, in a saved picture's ⋯: share's tray
+         with its arrow turned in, the original landing on this device. */
+      :kind==='download'?<><path d="M12 4.4v9.8"/><path d="m8.6 10.8 3.4 3.4 3.4-3.4"/><path d="M7.5 10.5H6.2a1.4 1.4 0 0 0-1.4 1.4v6.4a1.4 1.4 0 0 0 1.4 1.4h11.6a1.4 1.4 0 0 0 1.4-1.4v-6.4a1.4 1.4 0 0 0-1.4-1.4h-1.3"/></>
       /* `keep` IS A SAVE, NOT A DOWNLOAD. Founder, 2026-10-15: "instead of
          download have a save icon." The arrow into a tray read as a file
          landing on your disk; this is the one shape everyone already reads
