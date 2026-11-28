@@ -91,7 +91,9 @@ it('answers a save with a question about it that stays long enough to be taken, 
   await settle(500, 24); // seventeen seconds on
   expect(bubble(), 'the question went before twenty seconds').toContain('Saved');
   await settle(500, 8); // twenty one seconds on
-  expect(bubble(), 'the question never left').not.toContain('Saved');
+  /* Anchored: what stands after it may be the day one ask (2026-11-27),
+     "Saved things in other apps?", which is not the kept bubble. */
+  expect(bubble(), 'the question never left').not.toMatch(/^Saved(\.|$)/);
 });
 
 /* Code review, 2026-11-08: a second save while "Saved" stood said the same

@@ -239,7 +239,10 @@ import {
   type ApiPrinciple,
   fetchTheWeather,
   ApiError,
+  type ApiInspiration,
 } from "../lib/api";
+import { FEW_SAVES, bringInImports, importAnswered, rememberImportAnswer, type ImportDoor } from "../lib/day-one-import";
+import { ImportAsk } from "../components/ImportAsk";
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
@@ -318,6 +321,14 @@ const PROMPT_RETURN_MS = 6000;
 const BAR_SAVED_MS = 1800;
 /** How far the creature is pulled right, in CSS px, before the pull is the walk to Principles. */
 const CREATURE_PULL = 56;
+/** How long a brought-in save's light takes to rise from the bar into the
+    creature; `.waka-import-light`'s animation is the same length. */
+const IMPORT_FLIGHT_MS = 1100;
+/** How long "Reading them now…" waits for the hunch or the reading before the
+    bubble goes back to its own line (the hunch poll asks for 30 seconds). */
+const IMPORT_READING_MS = 45_000;
+/** How long the "a few didn't come in" line stands when nothing came in. */
+const IMPORT_LEFT_OUT_MS = 8_000;
 
 /* HOW LONG A PAUSE IN TYPING COUNTS AS FINISHING A NAME. Long enough that
    a normal hesitation mid-word does not write, short enough that closing
@@ -5348,6 +5359,73 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const screenshotIntoNewNote = (files: File[]) => {
     freshNoteFromHome(); startNewInspiration(); void addInspirationFiles(files);
   };
+
+  /* ═══ BRING THEM IN ON DAY ONE (founder, 2026-11-27, flow A) ═══════════
+     A new person (fewer than `FEW_SAVES`) is asked once, in the bubble, for
+     what they already saved elsewhere: Photos, Files, Not now. Any answer is
+     remembered per profile; after it the bar's photo button is the door.
+     Each picked item becomes its own save (`bringInImports`), and as each
+     lands a light rises from the bar into the creature and the save is born
+     on the field, which is what grows its glow (`born` flares it, and the
+     aura's reach is `savingLight` over your saves). Then the usual reading:
+     the hunch poll above already asks again when the count grows.
+     STATES RENDER, NUMERALS NEVER: the bubble says "Bringing them in…" and
+     then "Reading them now…", never how many. */
+  const [importAnsweredHere, setImportAnsweredHere] = useState(() => importAnswered(storageScope));
+  const [importRun, setImportRun] = useState<null | { phase: 'bringing' | 'reading'; leftOut: boolean }>(null);
+  const [importLights, setImportLights] = useState<Array<{ id: string; x: number }>>([]);
+  const importTimers = useRef<number[]>([]);
+  const importAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => { importAbort.current?.abort(); importTimers.current.forEach(id => window.clearTimeout(id)); }, []);
+  const askToImport = !importAnsweredHere && !importRun && phase === 'ready' && atWall.kind === 'self' && !standingAsAgent &&
+    !offline && Boolean(storageScope) && savedCount !== null && savedCount < FEW_SAVES &&
+    /* A READING OR A HUNCH IS ALREADY WHAT THE BUBBLE IS FOR: the ask waits
+       behind them, since the reading is the product and the ask only hurries it. */
+    !lead && !hunch;
+  /* THE SAME LANDING A SAVE FROM THE NOTEPAD GETS (`onResolved` above):
+     known to the details, born on the field, counted, its processing tracked. */
+  const landImported = (made: ApiInspiration) => {
+    if (made.profileId !== storageScope?.profileId) return;
+    const detail = toInspirationDetail(made);
+    sourceListMutationRef.current += 1;
+    detailsRef.current.set(made.id, detail);
+    const known = inspirationsRef.current?.some(item => item.id === made.id) || bornIdsRef.current.has(made.id);
+    if (!known) birthInspiration(made.id, detail.preview, Date.parse(made.createdAt), made.id);
+    setInspirations(previous => previous?.some(item => item.id === made.id) ? previous : [...(previous ?? []), detail]);
+    if (made.processing) sourceProcessing.track(made.id, made.processing);
+  };
+  const answerImport = (answer: ImportDoor | 'not_now') => { rememberImportAnswer(storageScope, answer); setImportAnsweredHere(true); };
+  const startImport = (files: File[], door: ImportDoor) => {
+    if (!storageScope || importAbort.current) return;
+    answerImport(door);
+    const controller = new AbortController(); importAbort.current = controller;
+    setImportRun({ phase: 'bringing', leftOut: false });
+    const flights: Promise<void>[] = [];
+    void bringInImports({ files, door, profileId: storageScope.profileId, signal: controller.signal, onLanded: made => {
+      /* THE LIGHT EXPLAINS THE SAVE: it rises from the bar, where saving
+         happens, into the creature, and the save is born as it arrives. With
+         less motion asked for there is no flight, only the arrival. */
+      if (prefersStillness()) { landImported(made); return; }
+      const light = { id: made.id, x: Math.round((Math.random() - 0.5) * 160) };
+      setImportLights(lights => [...lights, light]);
+      flights.push(new Promise(done => {
+        importTimers.current.push(window.setTimeout(() => {
+          if (controller.signal.aborted) return done();
+          landImported(made); setImportLights(lights => lights.filter(item => item.id !== light.id)); done();
+        }, IMPORT_FLIGHT_MS));
+      }));
+    } }).then(async ({ landed, leftOut }) => {
+      await Promise.all(flights);
+      if (controller.signal.aborted) return;
+      importAbort.current = null;
+      setImportRun({ phase: 'reading', leftOut: leftOut > 0 });
+      /* NOTHING LANDED: no reading is coming from this, so the bubble goes
+         back to what it says, keeping the left out line for a moment. */
+      importTimers.current.push(window.setTimeout(() => setImportRun(null), landed ? IMPORT_READING_MS : IMPORT_LEFT_OUT_MS));
+    });
+  };
+  /* The reading or the hunch arriving is what the bubble was waiting for. */
+  useEffect(() => { if ((lead || hunch) && importRun?.phase === 'reading') setImportRun(null); }, [lead, hunch, importRun?.phase]);
   const mouthWasOpen = useRef(mouthOpen);
   useEffect(() => {
     if (mouthWasOpen.current && !mouthOpen) freshUnderway.current = false;
@@ -9517,6 +9595,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 : <PrinciplesSpark />}
             </button>
           ) : null}
+          {/* ═══ WHAT WAS BROUGHT IN RISES INTO THE CREATURE (day one
+              import) ═══ One light per save as it lands, from the bar up to
+              the creature's middle (`--jar-char-mid`, the press target's own
+              anchor), each from a little left or right of the bar's middle. */}
+          {importLights.length ? (
+            <div className="waka-import-lights" aria-hidden="true">
+              {importLights.map(light => <span key={light.id} className="waka-import-light" style={{ ['--from-x' as string]: `${light.x}px` }} />)}
+            </div>
+          ) : null}
           {/* Taps change the invitation on this profile; dragging right
               still opens Principles. The release click after a drag is ignored. */}
           {!backgroundHidden && !mouthOpen && !reviewing ? (
@@ -9882,7 +9969,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        hunch && !standingAsAgent ? (
+                        importRun && !standingAsAgent ? (
+                          /* ═══ BRINGING THEM IN, THEN READING THEM (day one
+                             import) ═══ A state, never a count. */
+                          <>
+                            <span className="jar-char-bubble-reading" role="status">
+                              {say(importRun.phase === 'bringing' ? 'worldImportBringing' : 'worldImportReading')}</span>
+                            {importRun.leftOut ? <span className="jar-char-bubble-of">{say('worldImportLeftOut')}</span> : null}
+                          </>
+                        ) : askToImport ? (
+                          /* ═══ THE ONE TIME ASK (day one import) ═══ Only
+                             while there is no hunch (`askToImport`); asked
+                             once, and any answer gives the bubble back. */
+                          <ImportAsk locale={locale} onPick={startImport} onNotNow={() => answerImport('not_now')} />
+                        ) : hunch && !standingAsAgent ? (
                           /* ═══ A HUNCH (insight goal, phase 3) ═══ See
                              `pollHunch`: asked, then answered in place. */
                           hunchStep?.phase === 'asking'
@@ -11666,6 +11766,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                is dim for the same reason (code review, 2026-11-08). */
             canSay: composerDraft.available && (dictationAvailable() || Boolean(supportedRecordingType())),
             photoDisabled: !composerDraft.available,
+            /* While the creature asks for photos, the bar's photo button is
+               lit: it is the same door once the ask is answered. */
+            photoLit: askToImport,
           }}
           onChat={() => openTalk(null)}
           /* Fresh only: a bar mounted again later (back from Principles)

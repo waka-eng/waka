@@ -7414,6 +7414,37 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   100% { opacity: 0; transform: translateY(-6px); }
 }
 @media (prefers-reduced-motion: reduce) { .waka-home-bar-saved { animation: none; } }
+
+/* ═══ THE PHOTO DOOR, LIT WHILE THE CREATURE ASKS (day one import, flow A) ═══
+   The board's first frame: the ask is in the bubble and the bar's photo
+   button is lit, because after the ask it is the same door. Light only: the
+   glyph glows, nothing fills (founder, 2026-11-05: "the button should never
+   fill up"). Steady, not pulsing: it marks a door, it is not asking twice. */
+.waka-home-bar-glyph--lit svg {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--w-warm) 80%, transparent));
+}
+
+/* ═══ WHAT WAS BROUGHT IN RISES INTO THE CREATURE (day one import) ═══════
+   One light per save as it lands. It leaves from the pill's middle
+   (`--sp-28` under the bar plus half its 64px), a little left or right of
+   centre (`--from-x`), and goes into the creature's middle, the same
+   `--jar-char-mid` the press target stands on, where it is taken in: the
+   save is born on the field as the light arrives, and the creature's flare
+   and glow are the arrival. 1.1s, the same as `IMPORT_FLIGHT_MS`. */
+.waka-import-lights { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.waka-import-light {
+  position: absolute; left: 50%; top: var(--jar-char-mid, 50%);
+  width: var(--sp-8); height: var(--sp-8); margin: calc(var(--sp-8) / -2) 0 0 calc(var(--sp-8) / -2);
+  border-radius: 50%; background: var(--w-warm);
+  box-shadow: 0 0 14px 4px color-mix(in srgb, var(--w-warm) 55%, transparent);
+  animation: waka-import-rise 1.1s cubic-bezier(0.45, 0, 0.2, 1) both;
+}
+@keyframes waka-import-rise {
+  0% { opacity: 0; transform: translate(var(--from-x, 0px), calc(var(--jar-vh, 100vh) - var(--jar-char-mid, 50vh) - var(--sp-28) - var(--sp-32))) scale(1.4); }
+  15% { opacity: 1; }
+  80% { opacity: 1; transform: translate(0, 0) scale(.9); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.3); }
+}
 }
 
 @layer chrome {

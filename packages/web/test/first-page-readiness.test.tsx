@@ -8,6 +8,7 @@ import {afterEach,beforeAll,expect,it,vi} from 'vitest';
 import {installCanvasStub,setViewport} from './helpers/canvas-stub';
 import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld, keepBox} from './helpers/render-home';
 import type {FieldLoad} from '../src/lib/data';
+import {writeProfileText} from '../src/lib/profile-storage';
 const facts={inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]};
 const progress=vi.hoisted(()=>({first:null as null|((value:FieldLoad)=>void),finish:null as null|((value:FieldLoad)=>void),fail:null as null|((error:Error)=>void),signal:null as AbortSignal|null,calls:0}));
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts)}));
@@ -105,6 +106,10 @@ it('labels loading on a cold field link instead of presenting the unfinished fie
      says so. Without this half, the four lines above are a tripwire with
      nothing attached to it. */
   await world.unmount();
+  /* The day one ask (2026-11-27) is answered: the empty line is what stands.
+     Written as `rememberImportAnswer` writes it; importing that module here
+     would load `lib/api` before this file's mocked facts exist. */
+  writeProfileText({accountId:'owner',profileId:VIEWER_ID},'import:asked','not_now');
   world=await mountWorld(facts,{initialEntries:['/?view=field']});
   await act(async()=>progress.first!({inspirations:[],total:0,short:false}));
   for(let n=0;n<6;n++)await world.step(100);

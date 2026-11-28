@@ -844,5 +844,12 @@
   "signupVerificationRetry": "인증 다시 시도",
   "signupOutcomeUnknown": "계정이 만들어졌을 수 있어요. 다시 가입하기 전에 로그인해서 확인해 주세요.",
   "signupNativeBrowserHint": "브라우저에서 계정을 만든 뒤 여기로 돌아와 로그인해 주세요.",
-  "signupOpenBrowser": "브라우저에서 계정 만들기"
+  "signupOpenBrowser": "브라우저에서 계정 만들기",
+  "worldImportAsk": "다른 앱에 저장해 둔 게 있나요? 여기로 가져오면 오늘 바로 읽어 볼게요.",
+  "worldImportKinds": "스크린샷, 사진, PDF.",
+  "worldImportPhotos": "사진",
+  "worldImportFiles": "파일",
+  "worldImportBringing": "가져오는 중이에요…",
+  "worldImportReading": "지금 읽고 있어요…",
+  "worldImportLeftOut": "몇 개는 가져오지 못했어요. 사진 버튼으로 다시 추가할 수 있어요."
 }

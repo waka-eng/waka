@@ -54,6 +54,9 @@ export function HomeBar(props: {
     canSay: boolean;
     /** True while the notepad's draft cannot take a file yet. */
     photoDisabled?: boolean;
+    /** True while the creature asks a new person for their photos (day one
+        import): the photo button is the same door, so it is lit. */
+    photoLit?: boolean;
   };
   onChat: () => void;
   chatDisabled?: boolean;
@@ -110,7 +113,7 @@ export function HomeBar(props: {
             </button>
             {/* THE PICKER OPENS INSIDE THE PRESS: a file input may only be
                 clicked from a person's own gesture. */}
-            <button type="button" className="waka-home-bar-door waka-home-bar-glyph" aria-label={say('worldBarKeepScreenshot')} title={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
+            <button type="button" className={`waka-home-bar-door waka-home-bar-glyph${save.photoLit ? ' waka-home-bar-glyph--lit' : ''}`} aria-label={say('worldBarKeepScreenshot')} title={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
               <HomeActionIcon kind="photo" />
             </button>
             <button type="button" className="waka-home-bar-door waka-home-bar-glyph" aria-label={say('worldBarKeepVoice')} title={say('worldBarKeepVoice')} disabled={!save.canSay} onClick={save.onSay}>
