@@ -8795,6 +8795,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
      let a tall screenshot overflow the screen's foot */
   position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain;
   transform-origin: center; will-change: transform; image-orientation: from-image; -webkit-user-drag: none;
+}
 /* ═══ INTRODUCTIONS ON HOME (design "Agent introductions", approved
    2026-11-27) ═══
    The ask, the introduction and the no all speak in the bubble's own voice
