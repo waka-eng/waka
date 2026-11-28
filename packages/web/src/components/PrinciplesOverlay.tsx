@@ -362,17 +362,17 @@ export function PrinciplesAsterisk({ mirrored = false }: { mirrored?: boolean })
     <span className="waka-principles-mark">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={mirrored ? { transform: "scaleX(-1)" } : undefined}>
         <defs>
-          <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="10.8" r="10">
+          <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="10.6" r="9">
             <stop offset="0" stopColor="#fffdf8" />
             <stop offset="0.6" stopColor="#f2e9d9" />
             <stop offset="1" stopColor="#c9bfad" />
           </radialGradient>
         </defs>
-        <g transform="translate(-1.6 1.4) scale(0.86)" style={{ transformOrigin: "12px 12px" }}>
+        <g transform="scale(0.86)" style={{ transformOrigin: "12px 12px" }}>
           <polygon points={STAR_POINTS} fill={`url(#${fill})`} stroke={`url(#${fill})`} strokeWidth="4.4" strokeLinejoin="round" />
         </g>
-        <circle className="waka-star-sparkle" cx="19.6" cy="4.6" r="1.35" fill="#fffdf8" />
-        <circle className="waka-star-sparkle waka-star-sparkle--far" cx="21.4" cy="8.6" r="0.7" fill="#f6eedf" opacity="0.8" />
+        <circle cx="20.2" cy="3.8" r="1.3" fill="#fffdf8" />
+        <circle cx="22.2" cy="7.6" r="0.7" fill="#f6eedf" opacity="0.75" />
       </svg>
     </span>
   );
