@@ -2554,16 +2554,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     listViews.inspirations.onShelf = false;
     setReopenSettings(n => n + 1);
   }, [savesOpenNow]);
-  /* "FROM 2" ENDS WHEN THE SHEET CLOSES (founder, 2026-11-27: opened from
-     "9 inspirations" it still said "From 2 inspirations"). A reading's saves
-     are a look, not a filter that stays. */
-  useEffect(() => { if (!savesOpenNow) setSavesFocus(null); }, [savesOpenNow]);
   const settingsCard = auth ? {
     /* Trash opens the Inspirations page on its deleted view. */
     /* TRASH RISES AS THE SHEET (founder, 2026-11-27: "should open
        inspirations in bottom up sheet style like when opening regular
        inspirations"): the same sheet the bar's count opens, on its deleted view. */
-    onOpenTrash: () => { listViews.inspirations.onShelf = true; trashFromSettings.current = true; if (!savesOpenNow) setSavesAsSheet(true); openOverHome('saves'); },
+    onOpenTrash: () => { listViews.inspirations.onShelf = true; trashFromSettings.current = true; setSavesFocus(null); if (!savesOpenNow) setSavesAsSheet(true); openOverHome('saves'); },
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
     localeBusy: settingsWrites.localeBusy,
@@ -7746,6 +7742,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
   const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); feel('light'); }, [openOverHome]);
+  /* THE COUNT OPENS ALL OF THEM (founder, 2026-11-27: opened from
+     "9 inspirations" it still said "From 2 inspirations"). A reading's saves
+     are a look, not a filter that stays; Back to that look still finds it. */
+  const openAllSaves = useCallback(() => { setSavesFocus(null); openSheet(); }, [openSheet]);
   /* ONCE A WEEK, FROM SUNDAY (local time). The week is named by its Sunday;
      the offer is remembered per profile, so it is made once, and only when
      the server has something true to say (`fetchWeeklyLine` is null else). */
@@ -11841,9 +11841,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
              inspirations caret clickable if at least 1 exists. dont show it
              if 0"), and none while the count is still unknown, so it never
              flashes in and out. */
-          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openSheet }
+          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openAllSaves }
             : !inspirations || inspirations.length + fieldBeyond === 0 ? undefined : {
-              onOpen: openSheet,
+              onOpen: openAllSaves,
               /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
                  the field keeps true through every keep and removal
                  (`fieldBeyond`); unknown until the field's first page. */

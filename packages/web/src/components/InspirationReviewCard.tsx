@@ -40,9 +40,14 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   // Parent keys this component to the profile and source; late replies cannot advance another card.
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
-  /* A picture save shows the picture; its file name is not words of theirs. */
+  /* A picture save shows the picture; its file name is not words of theirs,
+     so it is only spoken to a screen reader. A chat still quotes what the
+     server binds the opening to. */
   const photo=item.photoId??null;
-  const words=item.text||(photo?'':item.attachmentLabel)||(photo?'':say('worldSavedWord'));
+  const quoted=item.text||item.attachmentLabel||say('worldSavedWord');
+  const words=photo?item.text:quoted;
+  const label=item.text&&item.attachmentLabel&&!(photo&&item.labelIsPhoto)?item.attachmentLabel:null;
+  const spoken=photo&&!item.text?<span className="sr-only">{item.attachmentLabel||say('worldSavedWord')}</span>:null;
   const when=dateStamp(new Date(item.createdAt).getTime(),locale);
   async function answer(choice:RelevanceChoice){
     if(saving.current||changed)return false;
@@ -65,13 +70,13 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
     header={<p className="waka-review-ask">{say('worldInspirationReviewQuestion')}</p>}
     onOpen={changed?undefined:()=>setReading(true)}
     middle={<button type="button" className="jar-pick-act jar-pick-act--chat" disabled={busy} aria-label={say('worldTalkAboutThis')} title={say('worldTalkAboutThis')}
-      onClick={()=>onChat(say('worldInspirationReviewQuestion'),words)}><HomeActionIcon kind="bubble"/></button>}>
+      onClick={()=>onChat(say('worldInspirationReviewQuestion'),quoted)}><HomeActionIcon kind="bubble"/></button>}>
     {/* STRIPPED: "Your inspiration ·" before the date, and the "Tap to read
         all" hint below. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
     <p className="jar-pick-source">{when}</p>
-    {photo?<SavedPhoto id={photo} className="waka-review-photo"/>:null}
+    {photo?<SavedPhoto id={photo} className="waka-review-photo"/>:null}{spoken}
     {words?<blockquote className="jar-pick-statement waka-inspiration-review-text">{words}</blockquote>:null}
-    {item.text&&item.attachmentLabel&&!photo?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
+    {label?<p className="jar-pick-source">{label}</p>:null}
     {changed?<button type="button" className="waka-inspiration-review-action" disabled={busy} onClick={()=>{
       setBusy(true);void readInspirationRelevance(item.id,profileId).then(fresh=>{if(!alive.current)return;setItem(fresh);setChanged(false);setFailed(false);intent.current=null;}).catch(()=>{if(alive.current)setFailed(true);}).finally(()=>{if(alive.current)setBusy(false);});
     }}>{say('worldInspirationReviewReload')}</button>:null}
@@ -82,9 +87,9 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
       onPointerDown={stopSlip} onPointerMove={stopSlip} onPointerUp={stopSlip} onPointerCancel={stopSlip}>
       <SurfaceHeader locale={locale} back={{kind:'back',onBack:()=>setReading(false)}} title={when}/>
       <div className="waka-review-reader-page">
-        {photo?<SavedPhoto id={photo} className="waka-review-photo waka-review-photo--whole"/>:null}
+        {photo?<SavedPhoto id={photo} className="waka-review-photo waka-review-photo--whole"/>:null}{spoken}
         {words?<p className="waka-review-reader-text">{words}</p>:null}
-        {item.text&&item.attachmentLabel&&!photo?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
+        {label?<p className="jar-pick-source">{label}</p>:null}
       </div>
       <div className="waka-review-reader-foot">
         <p className="waka-review-reader-ask">{say('worldInspirationReviewQuestion')}</p>

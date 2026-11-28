@@ -30,6 +30,10 @@ const selection = {
      2026-11-27, of a review that read only "IMG_1431.png"). */
   photoId: sql<string | null>`(SELECT a.id::text FROM attachments a
     WHERE a.profile_id=${inspirations.profileId} AND a.inspiration_id=${inspirations.id} AND a.type='image' ORDER BY a.created_at,a.id LIMIT 1)`,
+  /* True when attachmentLabel names that same picture, so the card can drop
+     a file name without dropping a link's title. */
+  labelIsPhoto: sql<boolean>`coalesce((SELECT a.type='image' FROM attachments a
+    WHERE a.profile_id=${inspirations.profileId} AND a.inspiration_id=${inspirations.id} ORDER BY a.created_at,a.id LIMIT 1),false)`,
 };
 const revisionJoin = and(eq(inspirationRevisions.profileId,inspirations.profileId),eq(inspirationRevisions.inspirationId,inspirations.id));
 

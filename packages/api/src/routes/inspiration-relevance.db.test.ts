@@ -118,8 +118,13 @@ it('names a picture save by its picture, never only by its file name',async()=>{
   const f=await fixture();
   await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name) VALUES (${f.profileId},${f.id},'link','https://example.test/a','A link')`;
   const [photo]=await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name) VALUES (${f.profileId},${f.id},'image','s3://bucket/IMG_1431.png','IMG_1431.png') RETURNING id`;
-  const item=(await(await f.app.request(`/api/inspiration-relevance/${f.id}`)).json() as {item:{photoId:string|null}}).item;
+  const item=(await(await f.app.request(`/api/inspiration-relevance/${f.id}`)).json() as {item:{photoId:string|null;attachmentLabel:string|null;labelIsPhoto:boolean}}).item;
   expect(item.photoId).toBe(photo.id);
+  /* The label is the link's title, which the card keeps beside the picture. */
+  expect(item).toMatchObject({attachmentLabel:'A link',labelIsPhoto:false});
+  const [shot]=await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES (${f.profileId},'',${new Date(at.getTime()-35*86400000).toISOString()}) RETURNING id`;
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name) VALUES (${f.profileId},${shot.id},'image','s3://bucket/IMG_2.png','IMG_2.png')`;
+  expect((await(await f.app.request(`/api/inspiration-relevance/${shot.id}`)).json() as {item:{labelIsPhoto:boolean}}).item.labelIsPhoto).toBe(true);
   const [plain]=await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES (${f.profileId},'Only words',${new Date(at.getTime()-40*86400000).toISOString()}) RETURNING id`;
   expect((await(await f.app.request(`/api/inspiration-relevance/${plain.id}`)).json() as {item:{photoId:string|null}}).item.photoId).toBeNull();
 });

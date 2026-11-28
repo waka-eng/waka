@@ -192,5 +192,8 @@ it('shows a picture save as its picture, not its file name (founder, 2026-11-27)
   vi.mocked(listInspirationReviews).mockResolvedValue([{...original,text:'',attachmentLabel:'IMG_1431.png',photoId:'77777777-7777-4777-8777-777777777777'}]);
   await open();
   expect(world.container.querySelector('.waka-review-photo'),'the picture is on the card').not.toBeNull();
-  expect(world.container.textContent).not.toContain('IMG_1431.png');
+  /* Seen nowhere, but spoken, and still the chat's quote the server binds. */
+  expect(world.container.querySelector('.waka-review-photo + .sr-only')?.textContent).toBe('IMG_1431.png');
+  const visible=[...world.container.querySelectorAll('.jar-pick-statement, .jar-pick-source')].map(n=>n.textContent).join(' ');
+  expect(visible).not.toContain('IMG_1431.png');
 });
