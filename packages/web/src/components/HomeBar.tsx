@@ -54,11 +54,17 @@ export function HomeBar(props: {
     canSay: boolean;
     /** True while the notepad's draft cannot take a file yet. */
     photoDisabled?: boolean;
+    /** True while the creature asks a new person for their photos (day one
+        import): the photo button is the same door, so it is lit. */
+    photoLit?: boolean;
   };
   onChat: () => void;
   chatDisabled?: boolean;
   /** "Saved", for a moment after a save lands; it takes the pull's place. */
   saved?: boolean;
+  /** A line that must outlast the bubble (day one import: what did not come
+      in). It takes the pull's place, before "Saved"; a press puts it away. */
+  notice?: { text: string; onDismiss: () => void };
   /** "{n} kept ⌃": opens the saves, patterns and principles. `kept` is how
       many you have kept, absent while unknown; at none or unknown it reads "Kept". */
   pull?: { onOpen: () => void; kept?: number };
@@ -77,7 +83,14 @@ export function HomeBar(props: {
   const save = props.save;
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
-      {props.saved ? (
+      {props.notice ? (
+        /* The words are a polite live region; the press over them is named
+           for what it does (final review, 2026-11-27). */
+        <div className="waka-home-bar-notice" aria-live="polite">
+          <span>{props.notice.text}</span>
+          <button type="button" className="waka-home-bar-notice-close" aria-label={say('worldClose')} onClick={props.notice.onDismiss} />
+        </div>
+      ) : props.saved ? (
         <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (
         /* A LIT GRABBER, TAPPED OR DRAGGED UP (founder meeting, 2026-11-20:
@@ -110,7 +123,7 @@ export function HomeBar(props: {
             </button>
             {/* THE PICKER OPENS INSIDE THE PRESS: a file input may only be
                 clicked from a person's own gesture. */}
-            <button type="button" className="waka-home-bar-door waka-home-bar-glyph" aria-label={say('worldBarKeepScreenshot')} title={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
+            <button type="button" className={`waka-home-bar-door waka-home-bar-glyph${save.photoLit ? ' waka-home-bar-glyph--lit' : ''}`} aria-label={say('worldBarKeepScreenshot')} title={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
               <HomeActionIcon kind="photo" />
             </button>
             <button type="button" className="waka-home-bar-door waka-home-bar-glyph" aria-label={say('worldBarKeepVoice')} title={say('worldBarKeepVoice')} disabled={!save.canSay} onClick={save.onSay}>

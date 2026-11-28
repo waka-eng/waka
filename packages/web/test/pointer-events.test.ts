@@ -236,6 +236,9 @@ describe("nothing visible loses its press", () => {
                press in them. */
             ".jar-char-lines",
             ".waka-home-bar-beckon",
+            /* Day one import (2026-11-27): the lights rising from the bar into
+               the creature are aria-hidden paint, one span each. */
+            ".waka-import-lights",
             ".jar-atmos",
             ".jar-topbar",
             ".jar-offline",

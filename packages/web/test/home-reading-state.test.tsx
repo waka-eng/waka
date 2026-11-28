@@ -11,6 +11,7 @@ import {installCanvasStub,setViewport} from './helpers/canvas-stub';
 import {apiMockFrom,dataMockFrom,mountWorld,VIEWER_ID,type MountedWorld, keepBox} from './helpers/render-home';
 import type {TopOfMind} from '../src/lib/data';
 import {profileStorageKey} from '../src/lib/profile-storage';
+import {rememberImportAnswer} from '../src/lib/day-one-import';
 const facts=vi.hoisted(()=>({inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]}));
 const reads=vi.hoisted(()=>({owner:'profile-viewer',requests:[] as Array<{profile?:string;signal?:AbortSignal;resolve:(value:TopOfMind|null)=>void;reject:(reason:Error)=>void}>}));
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts),refreshTopOfMind:vi.fn(),fetchInspirationProcessing:vi.fn(),fetchPrincipleStatus:vi.fn()}));
@@ -57,6 +58,8 @@ it('keeps Home usable while a delayed reading loads, without claiming it is empt
   expect(world.container.textContent).not.toContain('Loading your reading…');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('shows the real empty state only after the owned response confirms no reading',async()=>{
+  /* The day one ask (2026-11-27) is answered: this is the line under it. */
+  rememberImportAnswer({accountId:'owner',profileId:VIEWER_ID},'not_now');
   world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
   /* THE WORDS CHANGED AND THE CLAIM DID NOT. Founder: "this should say no
      top of mind formed yet, add more inspirations. Don't say no reading."
@@ -73,6 +76,7 @@ it('shows the real empty state only after the owned response confirms no reading
   expect(world.container.textContent).not.toContain('Loading your reading…');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
+  rememberImportAnswer({accountId:'owner',profileId:VIEWER_ID},'not_now');
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
   expect(settled()?.textContent).toContain('Nothing saved yet.');
