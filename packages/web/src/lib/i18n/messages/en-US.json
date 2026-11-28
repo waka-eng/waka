@@ -856,5 +856,22 @@
   "worldImportNoneCameIn": "None of them came in.",
   "worldImportFewLeftOut": "A few didn’t come in.",
   "worldImportTryPhotoButton": "The photo button can add them again.",
-  "worldImportTryLater": "Try again later."
+  "worldImportTryLater": "Try again later.",
+  "introAskConsent": "Want an introduction when someone else holds one of your principles?",
+  "introAskMatch": "Someone else holds one of your principles. Want an introduction?",
+  "introAskFine": "Only principles are compared, never your saves. Names are shared only if you both say yes.",
+  "introYes": "Introduce us",
+  "introNotNow": "Not now",
+  "introOn": "Introductions are on. You can turn them off in Settings.",
+  "introWaiting": "Okay. If they say yes too, you’ll meet them here.",
+  "introBothHold": "You both hold",
+  "introYou": "You",
+  "introSomeone": "Someone",
+  "introDeclined": "Okay. Nothing was shared, and they won’t know you were asked.",
+  "introTurnOff": "Turn off introductions",
+  "introTurnOn": "Turn on introductions",
+  "introOff": "Introductions are off.",
+  "introDone": "Done",
+  "introSettingsFine": "Only principles are compared, never your saves.",
+  "introChangeFailed": "Couldn’t change introductions. Try again."
 }

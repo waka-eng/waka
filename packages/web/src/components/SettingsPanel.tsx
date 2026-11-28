@@ -7,6 +7,7 @@ import { isMobileBuild, platformServices } from "../lib/platform";
 import { checkedNativeApiOrigin } from "../lib/platform/api-origin";
 import { fetchProfiles, type ApiOwnedProfile } from "../lib/api/profiles";
 import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessions";
+import { fetchIntroductions, setIntroductionConsent } from "../lib/api/introductions";
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
@@ -121,6 +122,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         <h3 id="waka-settings-data" className="waka-settings-heading">{say("settingsGroupData")}</h3>
         <div className="waka-settings-list">
           <ProfileExportControl locale={props.locale} />
+          <IntroductionsControl locale={props.locale} />
           {props.onOpenTrash ? <button type="button" className="waka-settings-row" onClick={() => { props.onClose(); props.onOpenTrash?.(); }}>
             {say("worldDeletedShelf")}
             {/* IT LEAVES SETTINGS FOR A PAGE OF ITS OWN (founder, 2026-11-27:
@@ -369,6 +371,39 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
       )}
       {isMobileBuild && <p className="waka-settings-note">{t(locale, "profileExportBrowserHint")}</p>}
       {error && <p className="waka-account-failed" role="alert">{t(locale, error)}</p>}
+    </div>
+  );
+}
+
+/**
+ * INTRODUCTIONS, WHERE THE OTHER PRIVACY CONTROLS LIVE (design "Agent
+ * introductions", approved 2026-11-27). One row that names its act: turn
+ * on, or turn off. Shown where the feature is offered, and always while it
+ * is on, so withdrawing never depends on the feature being offered.
+ */
+function IntroductionsControl({ locale }: { locale: SupportedLocale }): JSX.Element | null {
+  const [state, setState] = useState<{ available: boolean; enabled: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void fetchIntroductions().then((next) => { if (live) setState({ available: next.available, enabled: next.consent.enabled }); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+  if (!state || (!state.available && !state.enabled)) return null;
+  const flip = () => {
+    const enabled = !state.enabled;
+    setBusy(true); setFailed(false);
+    void setIntroductionConsent(enabled).then(() => setState({ ...state, enabled }))
+      .catch(() => setFailed(true)).finally(() => setBusy(false));
+  };
+  return (
+    <div className="waka-settings-introductions">
+      <button type="button" className="waka-settings-row" disabled={busy} aria-pressed={state.enabled} onClick={flip}>
+        {t(locale, state.enabled ? "introTurnOff" : "introTurnOn")}
+      </button>
+      <p className="waka-settings-note">{t(locale, "introSettingsFine")}</p>
+      {failed ? <p className="waka-account-failed" role="alert">{t(locale, "introChangeFailed")}</p> : null}
     </div>
   );
 }

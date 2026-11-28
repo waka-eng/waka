@@ -112,6 +112,12 @@ every call logged and revocable in Settings. Agent to agent introductions betwee
 consenting people compare principles, never saves. Depends on Phases 1 to 4: an agent can
 only be as good as the reading.
 
+Introductions started 2026-11-27 (board "Agent introductions", branch `design/introductions`),
+behind `WAKA_INTRODUCTIONS=1` and off everywhere by default: opt in per person, a double
+blind ask per match, held principle statements compared by word overlap (no principle
+embeddings exist yet), and only a first name and each side's own principle words shown.
+Migration 0097; rules in `packages/api/src/lib/introductions.ts`.
+
 ## Rules that hold throughout
 
 Nothing invented: every sentence traces to saves. Signals are never shown by name. No

@@ -109,6 +109,8 @@ import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
 import { askSaveQuestion, readSaveQuestion, fetchWeeklyLine, type ApiWeeklyLine } from '../lib/api';
 import { WeeklyCard } from '../components/WeeklyCard';
+import { IntroductionBubble, IntroductionScene } from '../components/IntroductionVisit';
+import { useIntroductions } from '../lib/introductions';
 import { answerHunch, fetchHunch, type ApiHunch } from '../lib/api';
 import { feel } from '../lib/haptics';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
@@ -2116,6 +2118,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       .then(() => pollHunch(current.id, 24))
       .catch(() => setHunchStep(null));
   }, [hunchProfile, pollHunch]);
+  /* ═══ INTRODUCTIONS (design "Agent introductions", approved 2026-11-27) ═══
+     Two consenting people whose principles overlap. Only on your own home,
+     never on an agent's wall and never offline; the server decides what may
+     be shown (`lib/introductions.ts`), and it says it in the reading's place. */
+  const intro = useIntroductions(Boolean(hunchProfile) && atWall.kind === 'self');
   /** The next line, or the one a dot names. */
   const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
@@ -5014,6 +5021,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* (Where the share may be offered: your own wall, not an agent's, and not
      while home is still opening onto an agent's wall from its address.) */
   const [offeredShare, setOfferedShare] = useState<{ text: string; link: boolean; preview: string; fromBookmarklet: boolean } | null>(null);
+  /** An introduction has something to say, and the reading's place is free for it. */
+  const introSays = Boolean(intro.stage) && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading';
   useEffect(() => {
     if (phase !== 'ready' || !memoryScope || !composerDraft.ready) return;
     /* ONLY ON YOUR OWN WALL. An agent's wall has no save doors, and a note
@@ -9643,7 +9652,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
               Always there on your own home (founder, 2026-11-19: "yes always
               shown"); with no principle yet, the walk ends on the page that
               says how they come. */}
-          {homeChromeShown && atWall.kind === 'self' && !offline ? (
+          {introSays && homeChromeShown && atNowView && !backgroundHidden ? (
+            <IntroductionScene intro={intro} locale={locale} size={simApiRef.current?.creatureAt()?.size ?? 110} />
+          ) : null}
+          {homeChromeShown && atWall.kind === 'self' && !offline && !(introSays && intro.stage === 'introduced') ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
               {/* A line about principles makes the asterisk flare. */}
@@ -9721,7 +9733,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             );
           })() : null}
-          {weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {introSays ? <IntroductionBubble intro={intro} locale={locale} /> : null}
+          {!introSays && weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             /* THE WEEK, OFFERED IN THE READING'S PLACE, once. */
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
@@ -9732,7 +9745,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {!weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {!introSays && !weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":

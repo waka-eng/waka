@@ -11,13 +11,21 @@
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): the export test replaces `fetch`
  * and the browser's object URL methods to verify a local download; other
- * cases use the real panel and catalogue without network access.
+ * cases use the real panel and catalogue without network access. The
+ * introductions client (`lib/api/introductions`) answers "not offered"
+ * unless a case says otherwise, so its read never reaches `fetch`.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { SettingsPanel, type SettingsPanelProps } from "../src/components/SettingsPanel";
+import { fetchIntroductions, setIntroductionConsent } from "../src/lib/api/introductions";
+
+vi.mock("../src/lib/api/introductions", () => ({
+  fetchIntroductions: vi.fn(async () => ({ available: false, consent: { enabled: false, answered: false }, offerConsent: false, introduction: null })),
+  setIntroductionConsent: vi.fn(async () => undefined),
+}));
 
 let host: HTMLDivElement;
 let root: Root;
@@ -175,4 +183,24 @@ it("opens How WAKA works as a Settings page, and Back returns to Settings", asyn
   await act(async () => back.click());
   expect(document.querySelector(".waka-surface-title")?.textContent).toBe("Settings");
   expect(onClose, "Back closed Settings instead of going back").not.toHaveBeenCalled();
+});
+
+it("turns introductions on and off from Your data, and shows the switch while they are on even where they are not offered", async () => {
+  vi.mocked(fetchIntroductions).mockResolvedValueOnce({ available: true, consent: { enabled: false, answered: true }, offerConsent: false, introduction: null });
+  await render({});
+  const row = () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => /introductions/.test(b.textContent ?? ""));
+  expect(row()?.textContent).toBe("Turn on introductions");
+  expect(host.textContent).toContain("Only principles are compared, never your saves.");
+  await act(async () => row()!.click());
+  expect(vi.mocked(setIntroductionConsent)).toHaveBeenCalledWith(true);
+  expect(row()?.textContent).toBe("Turn off introductions");
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  vi.mocked(fetchIntroductions).mockResolvedValueOnce({ available: false, consent: { enabled: true, answered: true }, offerConsent: false, introduction: null });
+  await render({});
+  expect(row()?.textContent, "withdrawing never depends on the feature being offered").toBe("Turn off introductions");
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await render({});
+  expect(row(), "not offered and off: no row").toBeUndefined();
 });
